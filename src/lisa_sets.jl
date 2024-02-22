@@ -186,11 +186,8 @@ module SetCore
         else
             return 0.7213 / (1 + 1.079 / sizeof(x))
         end
-
-
-
     
-        function bias(::HllSet{P}, biased_estimate) where {P}
+    function bias(::HllSet{P}, biased_estimate) where {P}
         # For safety - this is also enforced in the HLL constructor
         if P < 4 || P > 18
             error("We only have bias estimates for P ∈ 4:18")
@@ -213,8 +210,7 @@ module SetCore
         end
     end
 
-    function maxidx(vec::BitVector)
-        
+    function maxidx(vec::BitVector)        
         for i in length(vec):-1:1
             if vec[i]
                 return i
@@ -241,7 +237,6 @@ module SetCore
         d = count(hll_1) - x
         r = x
         n = count(hll_2) - x
-
         return (D = d, R = r, N = n)
     end
 
@@ -253,7 +248,6 @@ module SetCore
         end
         # Calculate the SHA1 hash
         hash_value = SHA.sha1(bytearray)
-
         return SHA.bytes2hex(hash_value)
     end
 

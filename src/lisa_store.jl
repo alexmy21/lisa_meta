@@ -352,7 +352,7 @@ module Store
         
         props = JSON3.read(node.props, Dict{String, Any})
         type_props = typeof(node.props)
-        println("props: $props", type_props)
+        # println("props: $props", type_props)
         commit_id = props["commit_id"]
         
         save_node(hdf5_filename, "/$commit_id/nodes/$sha1", labels, dataset, attributes=props)

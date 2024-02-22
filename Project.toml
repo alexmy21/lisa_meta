@@ -1,0 +1,13 @@
+[deps]
+CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
+DBInterface = "a10d1c49-ce27-4219-8d33-6db1a4562965"
+EasyConfig = "acab07b0-f158-46d4-8913-50acef6d41fe"
+FilePathsBase = "48062228-2e41-5def-b9a4-89aafe57970f"
+HDF5 = "f67ccb44-e63f-5c2f-98bd-6dc0ccc4ba2f"
+HTTP = "cd3eb016-35fb-5094-929b-558a96fad6f3"
+JSON3 = "0f8b85d8-7281-11e9-16c2-39a750bddbf1"
+MurmurHash3 = "b10b62ed-fbae-5ea5-b934-abaf0477b71d"
+PooledArrays = "2dfb63ee-cc39-5dd5-95bd-886bf059d720"
+SQLite = "0aa819cd-b072-5ff4-a722-6bc24af294d9"
+TextAnalysis = "a2db99b7-8b79-58f8-94bf-bbc811eef33d"
+UUIDs = "cf7118a7-6976-5b1a-9a39-7adc72f591a4"
