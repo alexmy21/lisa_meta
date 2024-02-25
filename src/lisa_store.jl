@@ -87,7 +87,7 @@ module Store
         dataset = collect(skipmissing(dataset))
         df = DataFrame(:id=>Int[], :bin=>Int[], :zeros=>Int[], :token=>String[], :refs=>String[])
         for item in dataset
-            if is_number(item)
+            if !isa(item, String)
                 continue
             end
             tokens = tokenize(item)
@@ -156,7 +156,7 @@ module Store
         assign_df = Graph.set_lock!(db, file.id, :, "book_column", "ingest_csv", "waiting", "waiting", lock_uuid; result=true)
         # Create initial csv file record in t_nodes table.
         # We need it to be able to create edges between the file and its columns
-        file_node = Graph.Node(file.id, [file.type], "", 0, Vector(), Config())
+        file_node = Graph.Node(file.id, [file.a_type], "", 0, Vector(), Config())
         Graph.replace!(db, file_node, table_name="t_nodes")
 
         if isempty(assign_df) 
@@ -167,31 +167,33 @@ module Store
         file_df = CSV.read(file_name, DataFrame; missingstring = "", skipto=offset+1, limit=limit, silencewarnings=true)
         file_hll = SetCore.HllSet{p}()
         file_props = Config()
-        file_props["sha1_arg"] = file_name
-        file_props["labels"] = file.type
+        file_props["file_name"] = file_name
+        file_props["file_type"] = file.a_type
         # Iterate over the columns
         i = 0
         for assign in eachrow(assign_df)
             col_props = Config()
             col_props["column_name"] = assign.item
             col_props["file_sha1"] = file.id
-            col_props["column_type"] = assign.type
+            col_props["column_type"] = assign.a_type
             # Process the column data depending on the column type
-            if assign.type == Missing
+            if assign.a_type == Missing
                 # println("Processing integer data for column $assign.item")
-            elseif assign.type == Int64
+            elseif assign.a_type == Int64
                 # println("Processing real number data for column $assign.item")
-            elseif assign.type == "String"
-                column_name = assign.item
+            elseif assign.a_type == "String"
+                column_name = string(assign.item)
                 # 
                 # dataset = df[!, column_name]
                 dataset = Set(file_df[!, column_name])         
-                col_hll = ingest_column(db, dataset, assign.id, [assign.item], col_props, p)
+                col_hll = ingest_column(db, dataset, assign.id, ["csv_column"], col_props, p)
                 SetCore.union!(file_hll, col_hll)
                 # Create and add to t_edge table a new edge between the file and the column
                 edge_props = Config()
                 edge_props["source"] = file.item
                 edge_props["target"] = assign.item
+                edge_props["source_label"] = "csv_file"
+                edge_props["target_label"] = "csv_column"
                 edge = Graph.Edge(file.id, assign.id, "has_column", edge_props)
                 # Update "t_edge" table
                 Graph.replace!(db, edge; table_name="t_edges")
@@ -205,7 +207,7 @@ module Store
         card = SetCore.count(file_hll)
         file_dump = SetCore.dump(file_hll)
         sha1_d = SetCore.id(file_hll)
-        file_node = Graph.Node(file.id, [file.type], sha1_d, card, file_dump, file_props)
+        file_node = Graph.Node(file.id, ["csv_file"], sha1_d, card, file_dump, file_props)
         Graph.replace!(db, file_node, table_name="t_nodes")
 
         Graph.unset_lock!(db, file.id, :, "completed")
@@ -215,7 +217,7 @@ module Store
         This function is almost the same as _ingest_csv, but reads a CSV file to SQLite DB column by column. 
         Suppose to save some memory.
     """
-    function ingest_csv(db::Graph.DB, file::Graph.Assignment, lock_uuid::String; p::Int=10, limit::Int=-1, offset::Int=0) 
+    function ingest_csv(db::Graph.DB, file::Graph.Assignment, lock_uuid::String; p::Int=10, limit::Int=typemax(Int), offset::Int=0) 
         assign_df = Graph.set_lock!(db, file.id, :, "book_column", "ingest_csv", "waiting", "waiting", lock_uuid; result=true)
         if isempty(assign_df) 
             println("The file $file.item is already being processed")
@@ -225,6 +227,7 @@ module Store
         # We need it to be able to create edges between the file and its columns
         file_node = Graph.Node(file.id, [file.a_type], "", 0, Vector(), Config())
         Graph.replace!(db, file_node, table_name="t_nodes")
+
         file_name = abspath(file.item)
         csv_data = CSV.File(file_name, skipto=offset+1, limit=limit, silencewarnings=true) # Read the CSV file into a Tables.jl compatible object
         db_memory = SQLite.DB(":memory:") # Create an SQLite in-memory database
@@ -236,7 +239,7 @@ module Store
         i = 0
         for assign in eachrow(assign_df)
             col_props = Config()
-            col_props["column_name"] = assign.item
+            col_props["column_name"] = string(assign.item)
             col_props["file_sha1"] = file.id
             col_props["column_type"] = assign.a_type
             if assign.a_type == Missing
@@ -244,8 +247,9 @@ module Store
             elseif assign.a_type == Int64
                 # println("Processing real number data for column $assign.item")
             elseif assign.a_type == "String"
-                try
-                    column_name = assign.item
+                # try
+                    column_name = string(assign.item)
+                    println("Processing string data for column '$column_name'")
                     dataset_df = DBInterface.execute(db_memory, """SELECT DISTINCT "$column_name" FROM file_df""") |> DataFrame
                     dataset = Set(dataset_df[!, column_name])
                     """
@@ -265,10 +269,10 @@ module Store
                     # Update "t_edge" table
                     Graph.replace!(db, edge; table_name="t_edges")
                     i = i + 1
-                catch e
-                    column_name = assign.item
-                    println("ingest_csv ERROR on $column_name, Error msg: $e")
-                end
+                # catch e
+                #     column_name = assign.item
+                #     println("ingest_csv ERROR on $column_name, Error msg: $e")
+                # end
             else
                 # Process other types of data
             end
@@ -509,6 +513,17 @@ module Store
             println("update_node error: $e")
         end
         return row
+    end
+
+    function is_quoted(s::String)
+        return length(s) >= 2 && s[1] == '"' && s[end] == '"'
+    end
+
+    function set_quotes(s::String)
+        if is_quoted(s)
+            return s
+        end
+        return "\"$s\""
     end
 
 end # module

@@ -38,6 +38,7 @@ module Graph
     using JSON3: JSON3
     using EasyConfig
     using DataFrames: DataFrame
+    using DataFrames: DataFrameRow
 
     export DB, Node, Edge, Assignment, Token, set_to_json, json_to_set, assign_lock!, assign_unlock!
 
@@ -60,6 +61,9 @@ module Graph
         Assignment(id, parent, item, a_type, processor_id, lock_uuid, status)
     Assignment(row::SQLite.Row) =
         Assignment(row.id, row.parent, row.item, row.a_type, row.processor_id, row.lock_uuid, row.status)
+    Assignment(row::DataFrameRow) =
+        Assignment(row.id, row.parent, row.item, row.a_type, row.processor_id, row.lock_uuid, row.status)
+
 
     function Base.show(io::IO, o::Assignment)
         print(io, "Assignment($(o.id), $(o.parent), $(o.item), $(o.a_type), $(o.processor_id), $(o.lock_uuid), $(o.status))")

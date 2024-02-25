@@ -303,4 +303,14 @@ module SetCore
         abs_hash = abs(hash(x))
         return Int(abs_hash % typemax(Int64))
     end
+
+    function seeded_hash(x, seed)
+        return hash(hash(x) + seed)
+    end
+
+    function bit_indices(n)
+        binary_representation = reverse(digits(n, base=2))
+        return findall(x -> x == 1, binary_representation)
+    end
 end
+
