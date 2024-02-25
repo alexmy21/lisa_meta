@@ -26,9 +26,9 @@ In **lisa_meta** this interpretation/conversion is done by implementing differen
 
 What is important, in this diagram each **token** from inverted index **tokens** is converted to the **hash** (unsigned 64 bit integer). This **hash** serves as a **token ID** in **tokens** index.
 
-In the **nodes** table each token ID is placed into the **HllSet** assigned for a given external dataset. **HllSet** is not just collection of another elements. It is a structure (kind of tensors) that has fixed number of rows (we called them **bins**) and each **bin** is a 64-bit BitVector. So, it is a 2 dimentional tansor after all. 
+In the **nodes** table each token ID is placed into the **HllSet** assigned for a given external dataset. **HllSet** is not just collection of another elements. It is a structure (kind of tensors) that has fixed number of rows (we called them **bins**) and each **bin** is a 64-bit BitVector. So, it is a 2 dimensional tensor after all.  
 
-The number of rows in this tensor is power of 2 - $2^p$, currently we are using $p = 10$. This allows us to keep the size of HllSet small enough (around 8KB) with a good accuracy of the cardinality calculation. **Note, this is constant and doesn't depend on the original dataset size. So, basically any dataset can be encoded in the HllSet not bigger than 8KB. If we need more precise cardinality estimation we can increase it with bigger $p$.
+The number of rows in this tensor is power of 2 - $2^p$, currently we are using $p = 10$. This allows us to keep the size of HllSet small enough (around 8KB) with a good accuracy of the cardinality calculation. **Note**, this is constant and doesn't depend on the original dataset size. So, basically any dataset can be encoded in the HllSet not bigger than 8KB. If we need more precise cardinality estimation we can increase it with bigger $p$.
 
 The assignment algorithm is quet simple:
 
@@ -43,7 +43,7 @@ Function $F$ is a "many-to-one" map from the **tokens** to the presentation of t
 
 As a conclusion: once you converted an original dataset to the HllSet, it is hard to figure out a true source for the HllSet presentation. So, "a thought, once spoken, is a lie" has merits :).
 
-In the following cells we'll try to reduce ambiguity of tracing tokens from the HllSet presentation. 
+In the **lisa_analytics.ipynb** we'll try to reduce ambiguity of tracing tokens from the HllSet presentation.  
 
 The consistency of conversion datasets to HllSets depends on two factors:
 
@@ -78,8 +78,8 @@ But it is also obvious, that tokens from original dataset should be in both resu
 
 Does this trick eliminate ambiguity? Maybe, or maybe not.
 
-The hope is that intersection of two results would be closer to correct one:
+We hope that intersection of two results would be closer to correct one:
 
 $$X = X_{(seed)} \cap X_{(std)}$$
 
-Lets see how it works with some sample data in **lisa_analytics.ipynb**.
+Lets see how it works with some sample data in the **lisa_analytics.ipynb**.

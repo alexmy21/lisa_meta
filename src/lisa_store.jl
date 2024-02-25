@@ -21,6 +21,8 @@ module Store
 
     export book_file, book_file, ingest_csv
 
+    seed::Int = 0
+
     function has_header(filename::String)
         first_row = first(CSV.File(filename), 1)
         return all(x -> isa(x, String), values(first_row))
@@ -33,7 +35,11 @@ module Store
         2. It books the columns in the csv files in the assignments table
         3. It books the csv files in the assignments table
     """
-    function book_file(db::Graph.DB, start_dir::String, hll::SetCore.HllSet; ext::String="csv") 
+    function book_file(db::Graph.DB, start_dir::String, hll::SetCore.HllSet; ext::String="csv", 
+        seed::Int=0) 
+
+        seed = seed
+
         # Update tokens table 
         df = DataFrame(:id=>Int[], :bin=>Int[], :zeros=>Int[], :token=>String[], :refs=>String[])
         # Walk through the directory and its subdirectories
@@ -57,7 +63,8 @@ module Store
         end
     end
 
-    function book_column(db::Graph.DB, hll::SetCore.HllSet, csv_filename::String, file_sha1::String)        
+    function book_column(db::Graph.DB, hll::SetCore.HllSet, csv_filename::String, file_sha1::String) 
+        
         file_name = abspath(csv_filename)
         # get file extentions
         ext = extension(Path(file_name))
@@ -112,7 +119,7 @@ module Store
     end
 
     function update_token(db::Graph.DB, df::DataFrame, hll::SetCore.HllSet{P}, item, sha_1::String; table_name::String="tokens") where {P}        
-        h = SetCore.u_hash(item)
+        h = SetCore.u_hash(item, seed) 
         # Retrieve the set from the table
         row = DBInterface.execute(db.sqlitedb, "SELECT * FROM $table_name WHERE id = $h") |> DataFrame
         item_set = Set([item])
@@ -151,7 +158,11 @@ module Store
         Arguments limit and offset are used to read the CSV file in chunks. 
         Can be used to simulate different loads with the same files.
     """    
-    function _ingest_csv(db::Graph.DB, file::Graph.Assignment, lock_uuid::String; p::Int=10, limit::Int=-1, offset::Int=0)         
+    function _ingest_csv_by_column(db::Graph.DB, file::Graph.Assignment, lock_uuid::String; 
+        p::Int=10, limit::Int=-1, offset::Int=0, seed::Int=0)
+
+        seed = seed
+        
         # db::DB, parent::String, type::String, processor_id::String, status::String, lock_uuid::String; result::Bool=false
         assign_df = Graph.set_lock!(db, file.id, :, "book_column", "ingest_csv", "waiting", "waiting", lock_uuid; result=true)
         # Create initial csv file record in t_nodes table.
@@ -186,7 +197,7 @@ module Store
                 # 
                 # dataset = df[!, column_name]
                 dataset = Set(file_df[!, column_name])         
-                col_hll = ingest_column(db, dataset, assign.id, ["csv_column"], col_props, p)
+                col_hll = ingest_dataset(db, dataset, assign.id, ["csv_column"], col_props, p)
                 SetCore.union!(file_hll, col_hll)
                 # Create and add to t_edge table a new edge between the file and the column
                 edge_props = Config()
@@ -217,7 +228,11 @@ module Store
         This function is almost the same as _ingest_csv, but reads a CSV file to SQLite DB column by column. 
         Suppose to save some memory.
     """
-    function ingest_csv(db::Graph.DB, file::Graph.Assignment, lock_uuid::String; p::Int=10, limit::Int=typemax(Int), offset::Int=0) 
+    function ingest_csv(db::Graph.DB, file::Graph.Assignment, lock_uuid::String; 
+        p::Int=10, limit::Int=typemax(Int), offset::Int=0, seed::Int=0)
+        
+        seed = seed
+
         assign_df = Graph.set_lock!(db, file.id, :, "book_column", "ingest_csv", "waiting", "waiting", lock_uuid; result=true)
         if isempty(assign_df) 
             println("The file $file.item is already being processed")
@@ -256,7 +271,7 @@ module Store
                         Here is the place where we can make decisions about the labels of future graph node
                         representing column. For now we are using a constant "csv_column" label.
                     """
-                    col_hll = ingest_column(db, dataset, assign.id, ["csv_column"], col_props, p)
+                    col_hll = ingest_dataset(db, dataset, assign.id, ["csv_column"], col_props, p)
                     # Update the file hyperloglog set with the column hyperloglog set
                     SetCore.union!(file_hll, col_hll)
                     # Create and add to t_edge table a new edge between the file and the column
@@ -294,7 +309,7 @@ module Store
 
     # Utility functions
     #--------------------------------------------------
-    function ingest_column(db::Graph.DB, dataset::Union{Vector, PooledVector, Set}, col_sha1::String, labels, props::Config, p::Int64)
+    function ingest_dataset(db::Graph.DB, dataset::Union{Vector, PooledVector, Set}, col_sha1::String, labels, props::Config, p::Int64)
         # Update tokens table 
         # df = DataFrame(:id=>Int[], :bin=>Int[], :zeros=>Int[], :token=>String[], :refs=>String[])
         hll = SetCore.HllSet{p}()

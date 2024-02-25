@@ -299,18 +299,26 @@ module SetCore
         return parse(UInt64, binary_string, base=2)
     end
 
-    function u_hash(x)
-        abs_hash = abs(hash(x))
+    function u_hash(x, seed::Int=0) 
+        if seed == 0
+            abs_hash = abs(hash(x))
+        else
+            abs_hash = abs(hash(hash(x) + seed))
+        end         
         return Int(abs_hash % typemax(Int64))
     end
 
-    function seeded_hash(x, seed)
-        return hash(hash(x) + seed)
-    end
+    # function seeded_hash(x, seed)
+    #     return u_hash(u_hash(x) + seed)
+    # end
 
     function bit_indices(n)
         binary_representation = reverse(digits(n, base=2))
         return findall(x -> x == 1, binary_representation)
+    end
+
+    function apply_fn(x, fn)
+        return fn(x)
     end
 end
 
