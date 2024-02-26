@@ -92,25 +92,25 @@ module Store
         # println("Updating tokens table")
         i = 0
         dataset = collect(skipmissing(dataset))
-        df = DataFrame(:id=>Int[], :bin=>Int[], :zeros=>Int[], :token=>String[], :refs=>String[])
+        df = DataFrame(:id=>Int[], :bin=>Int[], :zeros=>Int[], :token=>String[], :tf=>Int[], :refs=>String[])
         for item in dataset
             if !isa(item, String)
                 continue
             end
             tokens = tokenize(item)
             for token in tokens
-                try                    
+                # try                    
                     if isempty(token) || is_number(token) || length(token) < 3
                         continue
                     end                    
                     SetCore.add!(hll, token)    
                     update_token(db, df, hll, token, sha_1)
-                catch e
-                    i += 1
-                    if i < 20
-                        println("update_tokens ERROR on $item, Error msg: $e")
-                    end    
-                end
+                # catch e
+                #     i += 1
+                #     if i < 20
+                #         println("update_tokens ERROR on $item, Error msg: $e")
+                #     end    
+                # end
             end
         end
         SQLite.load!(df, db.sqlitedb, "tokens", replace=true)
@@ -123,7 +123,8 @@ module Store
         # Retrieve the set from the table
         row = DBInterface.execute(db.sqlitedb, "SELECT * FROM $table_name WHERE id = $h") |> DataFrame
         item_set = Set([item])
-        sha1_set = Set([sha_1])        
+        sha1_set = Set([sha_1]) 
+        tf = 0       
         if isempty(row)
             # Do nothing
         else
@@ -132,13 +133,14 @@ module Store
                 retrieved_sha1 = Graph.json_to_set(row[1, "refs"])
                 item_set = retrieved_items ∪ item_set
                 sha1_set = retrieved_sha1 ∪ sha1_set
+                tf = row[1, "tf"] + 1
             catch e
                 println("update_token ERROR on $item_set or $sha1_set, Error msg: $e")
             end
         end
         # Token(id::Int, bin::Int, zeros::Int; token::Set{String}, refs::Set{String})
-        token = Graph.Token(h, SetCore.getbin(hll, h), SetCore.getzeros(hll, h), 
-            JSON3.write(collect(item_set)), JSON3.write(collect(sha1_set)))        
+        token = Graph.Token(h, SetCore.getbin(hll, h), SetCore.getzeros(hll, h),
+            JSON3.write(collect(item_set)), tf, JSON3.write(collect(sha1_set)))        
         dict = Graph.getdict(token)
         push!(df, dict)
         return df  
@@ -305,6 +307,35 @@ module Store
         Graph.replace!(db, file_node, table_name="t_nodes")
 
         Graph.unset_lock!(db, file.id, :, "completed")
+    end
+
+    function collect_tokens(data::Vector, ds_id::String, db::Graph.DB)
+        query_1 = """
+            SELECT token FROM tokens WHERE bin=? AND zeros=? AND refs LIKE ?
+        """
+        # Collecting data from the "tokens" table
+        tokens = Set{String}()
+        n = length(data)
+
+        for i in 1:n
+            bins = SetCore.bit_indices(data[i])
+            if length(bins) > 0 
+                # println("bins: ", bins)
+                for bin in bins         
+                    result = DBInterface.execute(db, query_1, (i, bin, "%" * ds_id * "%")) |> DataFrame
+                    for row in eachrow(result)
+                        array = JSON3.read(row[1])
+                        if length(array) > 0                   
+                            for token in array
+                                # println(token)
+                                push!(tokens, token)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        return tokens
     end
 
     # Utility functions

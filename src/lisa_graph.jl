@@ -100,18 +100,19 @@ module Graph
         bin::Int
         zeros::Int
         token::String
+        tf::Int
         refs::String
     end
 
-    Token(id::Int, bin::Int, zeros::Int; token::String, refs::String) = 
-        Token(id, bin, zeros, token, refs)
-    Token(row::SQLite.Row) = Token(row.id, row.bin, row.zeros, JSON3.read(row.token), JSON3.read(row.refs))
+    Token(id::Int, bin::Int, zeros::Int; token::String, tf::Int, refs::String) = 
+        Token(id, bin, zeros, token, tf, refs)
+    Token(row::SQLite.Row) = Token(row.id, row.bin, row.zeros, JSON3.read(row.token), row.tf, JSON3.read(row.refs))
 
     function Base.show(io::IO, o::Token)
-        print(io, "Token($(o.id), $(o.bin), $(o.zeros), $(o.token), $(o.refs))")
+        print(io, "Token($(o.id), $(o.bin), $(o.zeros), $(o.token), $(o.tf), $(o.refs))")
     end
 
-    args(g::Token) = (g.id, g.bin, g.zeros, JSON3.write(collect(g.token)), JSON3.write(collect(g.refs)))
+    args(g::Token) = (g.id, g.bin, g.zeros, JSON3.write(collect(g.token)), g.tf, JSON3.write(collect(g.refs)))
 
     #=============================================================================#
     # Node, Edge
@@ -200,6 +201,7 @@ module Graph
                     bin INTEGER NOT NULL,
                     zeros INTEGER NOT NULL,
                     token TEXT NOT NULL,
+                    tf INTEGER DEFAULT 0 NOT NULL,
                     refs TEXT NOT NULL
                 );",
                 "CREATE INDEX IF NOT EXISTS token_idx ON tokens(token);",
@@ -380,7 +382,7 @@ module Graph
     end
 
     function Base.insert!(db::DB, token::Token)
-        execute(db.sqlitedb, "INSERT OR IGNORE INTO tokens VALUES(?, ?, ?, ?, ?)", args(token))
+        execute(db.sqlitedb, "INSERT OR IGNORE INTO tokens VALUES(?, ?, ?, ?, ?, ?)", args(token))
         db
     end
 
@@ -418,8 +420,8 @@ module Graph
     end
 
     function Base.replace!(db::DB, token::Token)
-        execute(db.sqlitedb, "INSERT INTO tokens VALUES(?, ?, ?, ?, ?)" *
-            " ON CONFLICT(id) DO UPDATE SET token=excluded.token, refs=excluded.refs", args(token))
+        execute(db.sqlitedb, "INSERT INTO tokens VALUES(?, ?, ?, ?, ?, ?)" *
+            " ON CONFLICT(id) DO UPDATE SET token=excluded.token, tf=excluded.tf, refs=excluded.refs", args(token))
         db
     end
 
@@ -480,8 +482,8 @@ module Graph
     end
 
     #-----------------------------------------------------------------------------# getindex (Node)
-    function getnode(db::DB, sh1::String; table_name::String="nodes") 
-        result = query(db, "*", table_name, "sha1 LIKE '$sha1'")
+    function getnode(db::DB, sha1::String, ::Colon; table_name::String="nodes") 
+        result = query(db, "*", table_name, "sha1='$sha1'")
         Node(first(result))
     end
 
@@ -490,7 +492,7 @@ module Graph
         (Node(row) for row in result)
     end
 
-    function getnode(db::DB, label::String; table_name::String="nodes") 
+    function getnode(db::DB, ::Colon, label::String; table_name::String="nodes") 
         result = query(db, "*", table_name, "labels LIKE '%$label%'")
         (Node(row) for row in result)
     end
