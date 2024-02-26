@@ -70,7 +70,7 @@ $$F_{(seed)}: X_{(seed)} \to Y_{(seed)}$$
 
 $$G_{(seed)}: Y_{(seed)} \to X_{(seed)}$$
 
-It is obvious, that
+It is obvious, that standard and seeded results may not be the same, especially when we are working with very big datasets:
 
  $$X_{(seed)} \not= X_{(std)}$$
 
