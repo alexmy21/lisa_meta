@@ -58,12 +58,12 @@ module SetCore
     include("constants.jl")
     using SHA
     using DataFrames
-
     using CSV
     using Arrow
     using Tables
 
-    export HllSet, add!, count, union, intersect, diff, isequal, isempty, id, delta, getbin, getzeros, maxidx
+    export HllSet, add!, count, union, intersect, diff, 
+        isequal, isempty, id, delta, getbin, getzeros, maxidx
 
     struct HllSet{P}
         counts::Vector{BitVector}
@@ -88,8 +88,6 @@ module SetCore
             return [falses(64 - 1) for _ in 1:n]
         end
     end
-
-    HllSet{P}(::Type{T}) where {P, T} = HllSet{10}()
 
     Base.show(io::IO, x::HllSet{P}) where {P} = print(io, "HllSet{$(P)}()")
 
@@ -150,7 +148,8 @@ module SetCore
     Base.isempty(x::HllSet{P}) where {P} = all(x -> x == 0,  x.counts)
 
     function getbin(hll::HllSet{P}, x::Int) where {P} 
-        # Increasing P by 1 to compensate BitVector size that is of size 64 - P
+        # println("P = ", P)
+        # Increasing P by 1 to compensate BitVector size that is of size 64
         x = x >>> (8 * sizeof(UInt) - (P + 1)) + 1
         str = replace(string(x, base = 16), "0x" => "")
         return parse(Int, str, base = 16)
@@ -161,8 +160,9 @@ module SetCore
         return trailing_zeros(x | or_mask) + 1
     end
 
-    function add!(hll::HllSet{P}, x::Any) where {P}
-        h = u_hash(x)
+    function add!(hll::HllSet{P}, x::Any; seed::Int = 0) where {P}
+        # println("seed = ", seed, "; P = ", P, "; x = ", x)
+        h = u_hash(x; seed=seed)
         bin = getbin(hll, h)
         idx = getzeros(hll, h)
         hll.counts[bin][idx] = true
@@ -299,7 +299,7 @@ module SetCore
         return parse(UInt64, binary_string, base=2)
     end
 
-    function u_hash(x, seed::Int=0) 
+    function u_hash(x; seed::Int=0) 
         if seed == 0
             abs_hash = abs(hash(x))
         else
@@ -307,10 +307,6 @@ module SetCore
         end         
         return Int(abs_hash % typemax(Int64))
     end
-
-    # function seeded_hash(x, seed)
-    #     return u_hash(u_hash(x) + seed)
-    # end
 
     function bit_indices(n)
         binary_representation = reverse(digits(n, base=2))

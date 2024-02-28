@@ -40,7 +40,8 @@ module Graph
     using DataFrames: DataFrame
     using DataFrames: DataFrameRow
 
-    export DB, Node, Edge, Assignment, Token, set_to_json, json_to_set, assign_lock!, assign_unlock!
+    export DB, Node, Edge, Assignment, Token, 
+        set_to_json, json_to_set, assign_lock!, assign_unlock!
 
     abstract type AbstractGraphType end
     
@@ -63,7 +64,6 @@ module Graph
         Assignment(row.id, row.parent, row.item, row.a_type, row.processor_id, row.lock_uuid, row.status)
     Assignment(row::DataFrameRow) =
         Assignment(row.id, row.parent, row.item, row.a_type, row.processor_id, row.lock_uuid, row.status)
-
 
     function Base.show(io::IO, o::Assignment)
         print(io, "Assignment($(o.id), $(o.parent), $(o.item), $(o.a_type), $(o.processor_id), $(o.lock_uuid), $(o.status))")
@@ -92,16 +92,15 @@ module Graph
     end
 
     args(c::Commit) = (c.id, c.committer_name, c.committer_email, c.message, JSON3.write(c.props))
-        # props_json = JSON3.write(c.props)
-    
+        
     #---------------------------------------------------------------------------- Token #
     struct Token <: AbstractGraphType
         id::Int
         bin::Int
         zeros::Int
-        token::String
+        token::Set{String}
         tf::Int
-        refs::String
+        refs::Set{String}
     end
 
     Token(id::Int, bin::Int, zeros::Int; token::String, tf::Int, refs::String) = 
@@ -127,19 +126,21 @@ module Graph
         props::Config
     end
 
-    Node(sha1::String, labels::String...; d_sha1::String="", card::Int, dataset::Vector{Int}=Vector{Int}(), props...) = 
+    Node(sha1::String, labels::Vector{String}=Vector{String}(); d_sha1::String="", card::Int, dataset::Vector{Int}=Vector{Int}(), props...) = 
         Node(sha1, collect(labels), d_sha1, card, dataset, Config(props))
     Node(row::SQLite.Row) = 
-        Node(row.sha1, split(row.labels, ';', keepempty=false), row.d_sha1, row.card, JSON3.read(row.dataset, Vector{Int}), 
+        Node(row.sha1, JSON3.read(row.labels), row.d_sha1, row.card, JSON3.read(row.dataset, Vector{Int}), 
             JSON3.read(row.props, Config))
 
     function Base.show(io::IO, o::Node)
         print(io, "Node($(o.sha1)")
-        !isempty(o.labels) && print(io, ", ", join(repr.(o.labels), ", "))
-        !isempty(o.props) && print(io, "; "); print_props(io, o.props)
+        print(io, "; ") 
+        print(io, o.labels)
+        print(io, "; ")
+        !isempty(o.props) && print(io, "props: "); print_props(io, o.props)
         print(io, ')')
     end
-    args(n::Node) = (n.sha1, isempty(n.labels) ? "" : ";"*join(n.labels, ';')*";", n.d_sha1, n.card, JSON3.write(n.dataset), 
+    args(n::Node) = (n.sha1, JSON3.write(n.labels), n.d_sha1, n.card, JSON3.write(n.dataset), 
                     JSON3.write(n.props))
 
     #-----------------------------------------------------------------------------# Edge
@@ -207,13 +208,12 @@ module Graph
                 "CREATE INDEX IF NOT EXISTS token_idx ON tokens(token);",
                 # nodes
                 "CREATE TABLE IF NOT EXISTS nodes (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
                     sha1 TEXT NOT NULL UNIQUE,
-                    labels TEXT NOT NULL,
-                    d_sha1 TEXT NOT NULL,
-                    card INTEGER NOT NULL,
-                    dataset TEXT NOT NULL,
-                    props TEXT NOT NULL
+                    labels TEXT DEFAULT '[]',
+                    d_sha1 DEFAULT '',
+                    card INTEGER DEFAULT 0,
+                    dataset TEXT DEFAULT '[]',
+                    props TEXT DEFAULT '{}'
                 );",
                 "CREATE INDEX IF NOT EXISTS sha1_idx ON nodes(sha1);",
                 # edges
@@ -229,13 +229,12 @@ module Graph
                 "CREATE INDEX IF NOT EXISTS r_type_idx ON edges(r_type);",
                 # t_nodes - nodes table in TRANSIT
                 "CREATE TABLE IF NOT EXISTS t_nodes (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
                     sha1 TEXT NOT NULL UNIQUE,
-                    labels TEXT NOT NULL,
-                    d_sha1 TEXT NOT NULL,
-                    card INTEGER NOT NULL,
-                    dataset TEXT NOT NULL,
-                    props TEXT NOT NULL
+                    labels TEXT DEFAULT '[]',
+                    d_sha1 TEXT DEFAULT '',
+                    card INTEGER DEFAULT 0,
+                    dataset TEXT DEFAULT '[]',
+                    props TEXT DEFAULT '{}'
                 );",
                 "CREATE INDEX IF NOT EXISTS t_sha1_idx ON t_nodes(sha1);",
                 # t_edges - edges table in TRANSIT
@@ -424,16 +423,22 @@ module Graph
             " ON CONFLICT(id) DO UPDATE SET token=excluded.token, tf=excluded.tf, refs=excluded.refs", args(token))
         db
     end
-
+    # (sha1, labels, d_sha1, card, dataset, props)
     function Base.replace!(db::DB, node::Node; table_name::String="nodes")
-        execute(db.sqlitedb, """INSERT INTO $table_name (sha1, labels, d_sha1, card, dataset, props) 
-            VALUES(?, ?, ?, ?, ?, json(?))
-            ON CONFLICT(sha1) DO UPDATE SET 
-            labels=excluded.labels, 
-            d_sha1=excluded.d_sha1,  
-            card=excluded.card,
-            dataset=excluded.dataset,
-            props=excluded.props""", args(node))
+        sha1 = node.sha1
+        labels = JSON3.write(node.labels)
+        d_sha1 = node.d_sha1
+        card = node.card
+        dataset = JSON3.write(node.dataset)
+        props = JSON3.write(node.props)
+        execute(db.sqlitedb, "INSERT INTO $table_name (sha1, labels, d_sha1, card, dataset, props)" *
+            " VALUES('$sha1', json('$labels'), '$d_sha1', $card, json('$dataset'), json('$props'))" *
+            " ON CONFLICT(sha1) DO UPDATE SET" *
+            " labels=excluded.labels," *
+            " d_sha1=excluded.d_sha1," *
+            " card=excluded.card," *
+            " dataset=excluded.dataset," *
+            " props=excluded.props;") 
         db
     end
     function Base.replace!(db::DB, edge::Edge; table_name::String="edges")
@@ -456,11 +461,24 @@ module Graph
         end
     end
 
+    #=============================================================================#
+    # DB gettoken, getassign, getnode, getedge
+    #=============================================================================# 
+    function gettokens(db::DB, refs::String, ::Colon, ::Colon, ::Colon) 
+        return query(db, "*", "tokens", "refs LIKE '%$refs%'")
+        # Token(first(result))
+    end
 
-    #=============================================================================#
-    # DB getassign, getnode, getedge
-    #=============================================================================#
-    # id::String, parent::String, item::String, type::String, processor_id::String, lock_uuid::String, status::String
+    function gettokens(db::DB, ::Colon, id::String, ::Colon, ::Colon) 
+        return query(db, "*", "tokens", "id LIKE '$id'")
+        # Token(first(result))
+    end
+
+    function gettokens(db::DB, ::Colon, ::Colon, bin::Int, zeros::Int) 
+        return query(db, "*", "tokens", "bin=$bin AND zeros=$zeros")
+        # Token(first(result))
+    end
+    #-----------------------------------------------------------------------------# getassign
     function getassign(db::DB, id::String, ::Colon) 
         result = query(db, "*", "assignments", "id LIKE '$id'")
         Assignment(first(result))
@@ -540,12 +558,17 @@ module Graph
 
     #=============================================================================#
     # Util functions
-    #=============================================================================#
-
+    #=============================================================================#    
     function getdict(strct::AbstractGraphType)
         dict = Dict()
         for field in fieldnames(typeof(strct))
-            dict[field] = getfield(strct, field)
+            # dict[field] = getfield(strct, field)
+            value = getfield(strct, field)
+            if value isa Vector || value isa Set
+                dict[field] = JSON3.write(value)
+            else
+                dict[field] = value
+            end
         end
         return dict
     end
@@ -592,26 +615,26 @@ module Graph
     #     out
     # end
 
-    function adjacency_matrix(g::SQLite.DB)
-        # Create a DataFrame to store the adjacency matrix
-        adjacency_df = DataFrame()
+    # function adjacency_matrix(g::SQLite.DB)
+    #     # Create a DataFrame to store the adjacency matrix
+    #     adjacency_df = DataFrame()
 
-        # Get the number of nodes in the graph
-        n_nodes = n_nodes(g)
+    #     # Get the number of nodes in the graph
+    #     n_nodes = n_nodes(g)
 
-        # Initialize the DataFrame with zeros
-        for i in 1:n_nodes
-            adjacency_df[!, Symbol("node_$i")] = zeros(n_nodes)
-        end
+    #     # Initialize the DataFrame with zeros
+    #     for i in 1:n_nodes
+    #         adjacency_df[!, Symbol("node_$i")] = zeros(n_nodes)
+    #     end
 
-        # Fill in the DataFrame with the adjacency matrix
-        for edge in g.edges
-            source = edge.source
-            target = edge.target
-            adjacency_df[source, Symbol("node_$target")] = 1
-        end
+    #     # Fill in the DataFrame with the adjacency matrix
+    #     for edge in g.edges
+    #         source = edge.source
+    #         target = edge.target
+    #         adjacency_df[source, Symbol("node_$target")] = 1
+    #     end
 
-        return adjacency_df
-    end
+    #     return adjacency_df
+    # end
 
 end
