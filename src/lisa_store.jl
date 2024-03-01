@@ -56,11 +56,15 @@ module Store
                     # Register (book) the file in the assignmnets table
                     f_name = joinpath(root, file)
                     sha_1 = bytes2hex(sha1(f_name))
+                    println("sha1: ", sha_1)
+                    
                     assign = Graph.Assignment(sha_1, root, f_name, ext, "book_file", "", "waiting")
                     Graph.replace!(db, assign)
 
-                    dataset = split(f_name,"/")
-                    hll = update_tokens(db, dataset, sha_1, P)
+                    dataset = [f_name, ext, root]
+                    # println("dataset: ", dataset)
+                    update_tokens(db, dataset, sha_1, P)
+
                     if column
                         # Book (register) the csv file columns in the assignments table
                         book_column(db, f_name, sha_1, P)
@@ -108,13 +112,11 @@ module Store
         Arguments limit and offset are used to read the CSV file in chunks. 
         Can be used to simulate different loads with the same files.
     """    
-    function _ingest_csv_by_column(db::Graph.DB, file::Graph.Assignment, lock_uuid::String; 
+    function ingest_csv_by_column(db::Graph.DB, file::Graph.Assignment, lock_uuid::String; 
         p::Int=10, limit::Int=-1, offset::Int=0, seed::Int=0)
 
-        global g_seed = seed
-        
-        assign_df = Graph.set_lock!(db, file.id, :, "book_column", "ingest_csv", "waiting", "waiting", lock_uuid; result=true)
-        
+        global g_seed = seed        
+        assign_df = Graph.set_lock!(db, file.id, :, "book_column", "ingest_csv", "waiting", "waiting", lock_uuid; result=true)        
         if isempty(assign_df) 
             println("The file $file.item is already being processed")
             return
@@ -171,22 +173,67 @@ module Store
         Graph.unset_lock!(db, file.id, :, "completed")
     end
 
-    function ingest_csv_by_row()
-        println("ingest_csv_by_row")
+    """
+        This function reads a whole CSV file to SQLite DB . May cause memory overflow with very big tables,
+        but it is slightly more performant.
+
+        ingest_csv_by_row
+        It takes a database, an assignment that points to csv file and a precision parameter.
+        1. reads file row by row
+        3. At the end of the process, it updates the status of the assignment to "completed" and
+        create a new node in the nodes with the SHA1 hash of the csv file as the id, and edges in edges tables.
+
+        Arguments limit and offset are used to read the CSV file in chunks. 
+        Can be used to simulate different loads with the same files.
+
+        IMPORTANT! This function can be run only after the ingest_csv_by_column function has been run. 
+        It assumes that the nodes for files already created.
+    """
+    function ingest_csv_by_row(db::Graph.DB, file::Graph.Assignment; 
+        p::Int=10, limit::Int=-1, offset::Int=0, seed::Int=0)
+
+        global g_seed = seed 
+
+        file_name = abspath(file.item)
+        file_hll = SetCore.HllSet{p}()
+        file_props = Config()
+        file_props["file_name"] = file_name
+        file_props["file_type"] = file.a_type
+
+        for row in CSV.Rows(file_name; limit=limit, offset=offset)
+            dataset = collect(skipmissing(row))
+            # println("row: ", dataset)
+            row_sha1 = bytes2hex(sha1(join(dataset)))
+            row_props = Config()
+            row_props["file_sha1"] = file.id     
+            row_hll = ingest_dataset(db, dataset, row_sha1, ["csv_row"], row_props, p)
+            file_hll = SetCore.union!(file_hll, row_hll)
+            # Create and add to t_edge table a new edge between the file and the row
+            edge_props = Config()
+            edge_props["source"] = file.item
+            edge_props["target"] = row_sha1
+            edge_props["source_label"] = "csv_file"
+            edge_props["target_label"] = "csv_row"
+            edge = Graph.Edge(file.id, row_sha1, "has_row", edge_props)
+            # Update "t_edge" table
+            Graph.replace!(db, edge; table_name="t_edges")
+        end
+
+        Graph.unset_lock!(db, file.id, :, "completed")
     end
 
-    function ingest_dataset(db::Graph.DB, dataset::Union{Vector, PooledVector, Set}, col_sha1::String, labels, props::Config, 
+    function ingest_dataset(db::Graph.DB, dataset::Union{Vector, PooledVector, Set}, node_sha1::String, labels, props::Config, 
         p::Int64)
 
         # println("dataset SHA1: ", col_sha1)
-        hll = update_tokens(db, dataset, col_sha1, p)
+        hll = update_tokens(db, dataset, node_sha1, p)
         
         # Update nodes table
         card = SetCore.count(hll)
         _dump = SetCore.dump(hll)
         sha1_d = SetCore.id(hll)
         
-        node = Graph.Node(col_sha1, labels, sha1_d, card, _dump, props)
+        node = Graph.Node(node_sha1, labels, sha1_d, card, _dump, props)
         Graph.replace!(db, node, table_name="t_nodes")
 
         return hll
