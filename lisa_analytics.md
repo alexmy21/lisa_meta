@@ -83,3 +83,32 @@ We hope that an intersection of two results would be closer to a correct one:
 $$X = X_{(seed)} \cap X_{(std)}$$
 
 Lets see how it works with some sample data in the **lisa_analytics.ipynb**.
+
+## Applying HllSets for Tabular data structures
+
+Formally tabular datasets can be described as a subset of Cartesian product of two sets:
+
+$$ R(s_1, s_2) \subseteq S_1 \times S_2$$
+
+However, in case of HllSets we do not have access to the elements of sets, so, we need to use a different approach to create and to use tabular structures.
+
+![alt text](tabular.png)
+
+The picture above is an illustration of how we can create binary relations between HllSets. In case of CSV files it will work as following:
+
+1. $S_1$ is a collection of HllSets that represents rows from the CSV file;
+2. $S_2$ is a collection of HllSets that represents column of the CSV file;
+3. Each cell in the tabular presentation is an intersection of the row HllSet and the column HllSet. So, this intersection is HllSet.
+
+As we learned in Domains and co-domains section, we can always trace the content of any HllSet back to tokens inverted index and get all tokens of the tabular presentation of the cell.
+
+The following things we should keep in mind when we are working with HllSets:
+
+1. The content of the cell is unordered collection of tokens from the original cell of CSV file. So, if you to know the order of those tokens, you should go to original CSV file.
+2. In many cases (as in the example that we are providing in the **lisa_analytica.ipynb**) we are using only a sample of rows. So, we should keep it in mind when we are working with this data.
+3. The correction is usually is simple:
+
+   1. To get the actual HllSet for column we should use the union of the cell's HllSets of a given column;
+   2. The same we should for row HllSets.
+
+The simple example is in the **lisa_analytics.ipynb**.
