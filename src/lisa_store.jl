@@ -19,12 +19,14 @@ module Store
     using PooledArrays
     using UUIDs
     using HDF5
+    using SparseArrays
 
     export book_file, ingest_csv, _ingest_csv_by_column, ingest_csv_by_row, # ingest functions
         commit, commit_node, commit_edge,                                   # commit functions 
         collect_tokens, update_props!,                                      # utility functions
         save_node, save_edge, read_datasets, retrieve,                      # HDF5 functions
-        is_sha1_hash, is_number, is_quoted, set_quotes                      # misc functions
+        is_sha1_hash, is_number, is_quoted, set_quotes,                     # misc functions
+        get_card_matrix, get_node_matrix                                    # matrix functions
 
     g_seed::Int = 0
 
@@ -218,24 +220,19 @@ module Store
             # Update "t_edge" table
             Graph.replace!(db, edge; table_name="t_edges")
         end
-
         Graph.unset_lock!(db, file.id, :, "completed")
     end
 
     function ingest_dataset(db::Graph.DB, dataset::Union{Vector, PooledVector, Set}, node_sha1::String, labels, props::Config, 
         p::Int64)
-
         # println("dataset SHA1: ", col_sha1)
-        hll = update_tokens(db, dataset, node_sha1, p)
-        
+        hll = update_tokens(db, dataset, node_sha1, p)        
         # Update nodes table
         card = SetCore.count(hll)
         _dump = SetCore.dump(hll)
-        sha1_d = SetCore.id(hll)
-        
+        sha1_d = SetCore.id(hll)        
         node = Graph.Node(node_sha1, labels, sha1_d, card, _dump, props)
         Graph.replace!(db, node, table_name="t_nodes")
-
         return hll
     end
     
@@ -291,6 +288,91 @@ module Store
         SQLite.load!(df, db.sqlitedb, "tokens", replace=true)
         
         return ds_hll
+    end
+
+    function get_card_matrix(db::Graph.DB, source_id::String)    
+        row_nodes = get_joined_nodes(db, source_id, "has_row")
+        row_sets = [SetCore.restore(SetCore.HllSet{10}(), 
+                JSON3.read(row.dataset, Vector{UInt64})) for row in eachrow(row_nodes)]
+        # Select column nodes
+        column_nodes = get_joined_nodes(db, source_id, "has_column")
+        column_sets = [SetCore.restore(SetCore.HllSet{10}(), 
+                JSON3.read(row.dataset, Vector{UInt64})) for row in eachrow(column_nodes)]
+        # Create a matrix where each cell is the cardinality of the intersection 
+        # of the corresponding row and column HllSet
+        matrix = spzeros(length(row_sets), length(column_sets))
+        for (i, row_set) in enumerate(row_sets)
+            for (j, column_set) in enumerate(column_sets)
+                matrix[i, j] = SetCore.count(SetCore.intersect(row_set, column_set))
+            end
+        end
+        return matrix
+    end
+
+    # This  function returns a matrix where each cell is the node of the intersection
+    function get_node_matrix(db::Graph.DB, source_id::String)        
+        row_nodes = get_joined_nodes(db, source_id, "has_row")
+        row_sets = [SetCore.restore(SetCore.HllSet{10}(), 
+                JSON3.read(row.dataset, Vector{UInt64})) for row in eachrow(row_nodes)]
+        # Select column nodes
+        column_nodes = get_joined_nodes(db, source_id, "has_column")
+        column_sets = [SetCore.restore(SetCore.HllSet{10}(), 
+                JSON3.read(row.dataset, Vector{UInt64})) for row in eachrow(column_nodes)]
+        # Create a matrix where each cell is the cardinality of the intersection of the corresponding row and column HllSet
+        # matrix = spzeros(length(row_sets), length(column_sets))
+        matrix = Array{Graph.Node}(undef, length(row_sets), length(column_sets))
+        for (i, row_set) in enumerate(row_sets)
+            row_id = row_nodes[i, "sha1"]
+            for (j, column_set) in enumerate(column_sets)
+                column_id = column_nodes[j, "sha1"]
+                d_set = SetCore.intersect(row_set, column_set)
+                card = SetCore.count(d_set)
+                dump = SetCore.dump(d_set)
+                sha1_d = SetCore.id(d_set)
+                sha1_d = SetCore.id(d_set)
+
+                props = Config()
+                props.source = row_id
+                props.target = column_id
+                node = Graph.Node(sha1_d, [row_id * "_" * column_id], sha1_d, card, dump, props)
+
+                matrix[i, j] = node
+            end
+        end
+        return matrix
+    end
+
+    function get_value_matrix(db::Graph.DB, source_id::String)    
+        row_nodes = get_joined_nodes(db, source_id, "has_row")
+        row_sets = [SetCore.restore(SetCore.HllSet{10}(), 
+                JSON3.read(row.dataset, Vector{UInt64})) for row in eachrow(row_nodes)]
+        # Select column nodes
+        column_nodes = get_joined_nodes(db, source_id, "has_column")
+        column_sets = [SetCore.restore(SetCore.HllSet{10}(), 
+                JSON3.read(row.dataset, Vector{UInt64})) for row in eachrow(column_nodes)]
+        # Create a matrix where each cell is the cardinality of the intersection 
+        # of the corresponding row and column HllSet
+        matrix = fill("", length(row_sets), length(column_sets))
+        for (i, row_set) in enumerate(row_sets)
+            row_id = row_nodes[i, "sha1"]
+            for (j, column_set) in enumerate(column_sets)
+                column_id = column_nodes[j, "sha1"]
+                result = Graph.gettokens(db, row_id, column_id)
+                tokens = Store.collect_tokens(db, result)
+                matrix[i, j] = JSON3.write(tokens)
+            end
+        end
+        return matrix
+    end
+
+    function get_joined_nodes(db::Graph.DB, source_id::String, r_type::String)
+        col_query = """
+            SELECT *
+            FROM t_nodes
+            INNER JOIN t_edges ON t_edges.target = t_nodes.sha1
+            WHERE t_edges.source LIKE '%$source_id%' AND t_edges.r_type LIKE '%$r_type%';
+        """
+        return DBInterface.execute(db.sqlitedb, col_query) |> DataFrame
     end
 
     # Commit functions
@@ -398,9 +480,9 @@ module Store
 
     # Utility functions
     #--------------------------------------------------
-    function collect_tokens(db::Graph.DB, refs::String)
+    function collect_tokens(db::Graph.DB, result)
         tokens = Set{String}()
-        result = Graph.gettokens(db, refs, :, :, :)
+        # result = Graph.gettokens(db, refs, :, :, :)
         for row in result
             token = JSON3.read(row.token)
             for tok in token

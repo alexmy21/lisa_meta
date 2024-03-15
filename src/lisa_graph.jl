@@ -454,30 +454,37 @@ module Graph
         stmt = "SELECT $select FROM $from WHERE $whr"
         # @info stmt
         res = isnothing(args) ? execute(db, stmt) : execute(db, stmt, args)
-        if isempty(res)
-            error("No $from found where: $whr")
-        else
-            return res
-        end
+        # if isempty(res)
+        #     error("No $from found where: $whr")
+        # else
+        #     return res
+        # end
+        return res
     end
 
     #=============================================================================#
     # DB gettoken, getassign, getnode, getedge
     #=============================================================================# 
-    function gettokens(db::DB, refs::String, ::Colon, ::Colon, ::Colon) 
+    function gettokens(db::DB, refs::String, ::Colon) 
         return query(db, "*", "tokens", "refs LIKE '%$refs%'")
-        # Token(first(result))
     end
 
-    function gettokens(db::DB, ::Colon, id::String, ::Colon, ::Colon) 
+    function gettokens(db::DB, ref1::String, ref2::String)
+        result = query(db, "*", "tokens", "refs LIKE '%$ref1%' AND refs LIKE '%$ref2%'") 
+        if isempty(result)
+            return ""
+        else
+            return result
+        end
+    end
+
+    function gettokens(db::DB, ::Colon, id::String) 
         return query(db, "*", "tokens", "id LIKE '$id'")
-        # Token(first(result))
     end
 
-    function gettokens(db::DB, ::Colon, ::Colon, bin::Int, zeros::Int) 
-        return query(db, "*", "tokens", "bin=$bin AND zeros=$zeros")
-        # Token(first(result))
-    end
+    # function gettokens(db::DB, ::Colon, ::Colon, bin::Int, zeros::Int) 
+    #     return query(db, "*", "tokens", "bin=$bin AND zeros=$zeros")
+    # end
     #-----------------------------------------------------------------------------# getassign
     function getassign(db::DB, id::String, ::Colon) 
         result = query(db, "*", "assignments", "id LIKE '$id'")
