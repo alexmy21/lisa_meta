@@ -41,7 +41,10 @@ module Graph
     using DataFrames: DataFrameRow
 
     export DB, Node, Edge, Assignment, Token, 
-        set_to_json, json_to_set, assign_lock!, assign_unlock!
+        set_to_json, json_to_set, assign_lock!, assign_unlock!,
+        getdict, getassign, getnode, getedge, gettokens,
+        insert!, replace!, unset_lock!, set_lock!
+        # adjacency_matrix
 
     abstract type AbstractGraphType end
     
@@ -140,6 +143,7 @@ module Graph
         !isempty(o.props) && print(io, "props: "); print_props(io, o.props)
         print(io, ')')
     end
+
     args(n::Node) = (n.sha1, JSON3.write(n.labels), n.d_sha1, n.card, JSON3.write(n.dataset), 
                     JSON3.write(n.props))
 
@@ -150,6 +154,7 @@ module Graph
         r_type::String
         props::Config
     end
+
     Edge(src::String, tgt::String, r_type::String; props...) = Edge(src, tgt, r_type, Config(props))
     Edge(row::SQLite.Row) = Edge(row.source, row.target, row.r_type, JSON3.read(row.props, Config))
 
@@ -158,6 +163,7 @@ module Graph
         !isempty(o.props) && print(io, "; "); print_props(io, o.props)
         print(io, ')')
     end
+
     args(e::Edge) = (e.source, e.target, e.r_type, JSON3.write(e.props))
 
     #-----------------------------------------------------------------------------# Base methods
@@ -319,8 +325,7 @@ module Graph
         """)
         if result
             DBInterface.execute(db, """SELECT * FROM assignments WHERE lock_uuid = '$lock_uuid';""") |> DataFrame
-        end
-        
+        end        
     end
 
     function set_lock!(db::DB, parent::String, ::Colon, 
@@ -341,8 +346,7 @@ module Graph
         """)
         if result
             DBInterface.execute(db, """SELECT * FROM assignments WHERE lock_uuid = '$lock_uuid';""") |> DataFrame
-        end
-        
+        end        
     end
 
     function unset_lock!(db::DB, id::String, ::Colon) 
@@ -452,14 +456,7 @@ module Graph
     #=============================================================================#
     function query(db::DB, select::String, from::String, whr::String, args=nothing)
         stmt = "SELECT $select FROM $from WHERE $whr"
-        # @info stmt
-        res = isnothing(args) ? execute(db, stmt) : execute(db, stmt, args)
-        # if isempty(res)
-        #     error("No $from found where: $whr")
-        # else
-        #     return res
-        # end
-        return res
+        return isnothing(args) ? execute(db, stmt) : execute(db, stmt, args)
     end
 
     #=============================================================================#
@@ -470,21 +467,13 @@ module Graph
     end
 
     function gettokens(db::DB, ref1::String, ref2::String)
-        result = query(db, "*", "tokens", "refs LIKE '%$ref1%' AND refs LIKE '%$ref2%'") 
-        if isempty(result)
-            return ""
-        else
-            return result
-        end
+        return query(db, "*", "tokens", "refs LIKE '%$ref1%' AND refs LIKE '%$ref2%'") 
     end
 
     function gettokens(db::DB, ::Colon, id::String) 
         return query(db, "*", "tokens", "id LIKE '$id'")
     end
 
-    # function gettokens(db::DB, ::Colon, ::Colon, bin::Int, zeros::Int) 
-    #     return query(db, "*", "tokens", "bin=$bin AND zeros=$zeros")
-    # end
     #-----------------------------------------------------------------------------# getassign
     function getassign(db::DB, id::String, ::Colon) 
         result = query(db, "*", "assignments", "id LIKE '$id'")
@@ -498,11 +487,11 @@ module Graph
 
     function getassign(db::DB, parent::String, a_type::String, processor_id::String, lock_uuid::String, status::String) 
         result = query(db, "*", "assignments", 
-        "parent LIKE '$parent'" *
-        " AND a_type LIKE '$a_type'" * 
-        " AND processor_id LIKE '$processor_id'" * 
-        " AND lock_uuid LIKE '$lock_uuid'" * 
-        " AND status LIKE '$status'")
+            "parent LIKE '$parent'" *
+            " AND a_type LIKE '$a_type'" * 
+            " AND processor_id LIKE '$processor_id'" * 
+            " AND lock_uuid LIKE '$lock_uuid'" * 
+            " AND status LIKE '$status'")
         (Assignment(row) for row in result)
     end
 
@@ -604,44 +593,4 @@ module Graph
     function json_to_set(json_str::String)
         return Set(JSON3.read(json_str))
     end
-
-    #-----------------------------------------------------------------------------
-    # adjacency_matrix work in progress
-    """
-    adjacency_matrix(db, type)
-
-    Create the adjacency matrix for a given edge `type`.  If `A[i,j] == true`, there exists an
-    edge from node `i` to node `j` with type `type`.
-    """
-    # function adjacency_matrix(db::DB, type)
-    #     n = n_nodes(db)
-    #     out = falses(n, n)
-    #     for row in execute(db, "SELECT DISTINCT source, target FROM edges WHERE type=?;", (type,))
-    #         out[row.source, row.target] = true
-    #     end
-    #     out
-    # end
-
-    # function adjacency_matrix(g::SQLite.DB)
-    #     # Create a DataFrame to store the adjacency matrix
-    #     adjacency_df = DataFrame()
-
-    #     # Get the number of nodes in the graph
-    #     n_nodes = n_nodes(g)
-
-    #     # Initialize the DataFrame with zeros
-    #     for i in 1:n_nodes
-    #         adjacency_df[!, Symbol("node_$i")] = zeros(n_nodes)
-    #     end
-
-    #     # Fill in the DataFrame with the adjacency matrix
-    #     for edge in g.edges
-    #         source = edge.source
-    #         target = edge.target
-    #         adjacency_df[source, Symbol("node_$target")] = 1
-    #     end
-
-    #     return adjacency_df
-    # end
-
 end

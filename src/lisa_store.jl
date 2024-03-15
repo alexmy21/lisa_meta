@@ -270,7 +270,7 @@ module Store
             
             return df  
         end
-        # println("Updating tokens table")
+        
         i = 0        
         for item in dataset
             if !isa(item, String)
@@ -318,7 +318,8 @@ module Store
         column_nodes = get_joined_nodes(db, source_id, "has_column")
         column_sets = [SetCore.restore(SetCore.HllSet{10}(), 
                 JSON3.read(row.dataset, Vector{UInt64})) for row in eachrow(column_nodes)]
-        # Create a matrix where each cell is the cardinality of the intersection of the corresponding row and column HllSet
+        # Create a matrix where each cell is the cardinality of the intersection 
+        # of the corresponding row and column HllSet
         # matrix = spzeros(length(row_sets), length(column_sets))
         matrix = Array{Graph.Node}(undef, length(row_sets), length(column_sets))
         for (i, row_set) in enumerate(row_sets)

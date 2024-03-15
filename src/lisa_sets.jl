@@ -188,7 +188,7 @@ module SetCore
         end
     
     
-        function bias(::HllSet{P}, biased_estimate) where {P}
+    function bias(::HllSet{P}, biased_estimate) where {P}
         # For safety - this is also enforced in the HLL constructor
         if P < 4 || P > 18
             error("We only have bias estimates for P ∈ 4:18")
@@ -318,4 +318,3 @@ module SetCore
         return fn(x)
     end
 end
-

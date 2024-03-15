@@ -15,8 +15,8 @@ SetCore.HllSet{P}(::Type{T}) where {P, T} = SetCore.HllSet{10}()
 # Working with HDF5 files
 #--------------------------------------------------
 function save(file_name::String, group_name::String, dataset_name::String, 
-    dataset::Vector{UInt64}; attributes::Dict = Dict())
-        
+    dataset::Vector{UInt64}; attributes::Dict = Dict()) 
+    
     h5open(file_name, "w") do file
         if haskey(file, group_name) 
             g = file[group_name]                
@@ -77,7 +77,6 @@ function save(file_name::String, group_name::String, dataset_name::String,
         end 
     end    
 end
-
 
 # Function to recursively read datasets from an HDF5 file or group that match a wildcard
 function read_datasets(file_or_group, wildcard)
