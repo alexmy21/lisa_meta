@@ -616,4 +616,11 @@ module Store
         end
         return "\"$s\""
     end
+
+    function remove_quotes(s::String)
+        if is_quoted(s)
+            return s[2:end-1]
+        end
+        return s
+    end
 end # module

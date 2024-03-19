@@ -63,9 +63,9 @@ module SetCore
     using Tables
 
     export HllSet, add!, count, union, intersect, diff, 
-        isequal, isempty, id, delta, getbin, getzeros, maxidx
+        isequal, isempty, id, delta, getbin, getzeros, maxidx, jaccard
 
-    struct HllSet{P}
+    struct HllSet{P} 
         counts::Vector{BitVector}
 
         function HllSet{P}() where {P}
@@ -227,13 +227,21 @@ module SetCore
         return round(Int, biased_estimate - bias(x, biased_estimate))
     end
 
-    function jaccard(hll_1::HllSet{P}, hll_2::HllSet{P}) where {P}
-        x = count(union(hll_1, hll_2))
-        n = count(intersect(hll_1, hll_2))
-        return round(Int64, ((n / x) * 100))
+    # function jaccard(hll_1::HllSet{P}, hll_2::HllSet{P}) where {P}
+    #     x = count(union(hll_1, hll_2))
+    #     n = count(intersect(hll_1, hll_2))
+    #     return round(Int64, ((n / x) * 100))
+    # end
+
+    function Base.match(x::HllSet{P}, y::HllSet{P}) where {P}
+        length(x.counts) == length(y.counts) || throw(ArgumentError("HllSet{P} must have same size"))
+        
+        count_u = count(union(x, y))
+        count_i = count(intersect(x, y))
+        return round(Int64, ((count_i / count_u) * 100))
     end
 
-    function delta(hll_1::HllSet{P}, hll_2::HllSet{P}) where {P}
+    function Base.diff(hll_1::HllSet{P}, hll_2::HllSet{P}) where {P}
         x = count(intersect(hll_1, hll_2))
         d = count(hll_1) - x
         r = x

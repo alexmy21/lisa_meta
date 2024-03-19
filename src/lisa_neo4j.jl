@@ -1,5 +1,6 @@
 
-include("lisa_sets.jl")
+# include("lisa_sets.jl")
+include("lisa_store.jl")
 
 """
     This module contains the functions to interact with the Neo4j database.
@@ -7,6 +8,7 @@ include("lisa_sets.jl")
 """
 module LisaNeo4j
     using ..SetCore
+    using ..Store
 
     using SQLite
     using DBInterface
@@ -30,8 +32,8 @@ module LisaNeo4j
         props::Config
     end
 
-    Neo_node(sha1::String, labels::String...; d_sha1::String="", card::Int, hll_set::SetCore.HllSet, props...) = 
-        Neo_node(sha1, collect(labels), d_sha1, card, hll_set, Config(props))
+    Neo_node(sha1::String, labels::String...; d_sha1::String="", card::Int, hll_set::SetCore.HllSet, props::Dict{String, Any}) = 
+        Neo_node(sha1, collect(labels), d_sha1, card, hll_set, EasyConfig(props))
 
     function request(url, headers, query)
         response = HTTP.request("POST", url, headers, query)
@@ -42,18 +44,21 @@ module LisaNeo4j
         return JSON3.write(Dict("statements" => [Dict("statement" => query)]))
     end
 
-    function collect_hll_sets(json::JSON3.Object, hlls::Dict{String, LisaNeo4j.Neo_node}; p::Int=10)
+    function collect_hll_sets(json::JSON3.Object, hlls::Dict{String, Neo_node}; p::Int=10)
         rows = [data["row"] for data in json.results[1].data]
         for row in rows
-            labels = row[1]
+            labels = JSON3.read(row[1], Array{String,1})
             sha1 = row[2]
             d_sha1 = row[3]
-            dataset = Vector{UInt64}(row[4])
-            props = JSON3.read(row[5])
+            println(row[4])
+            dataset = JSON3.read(row[4], Vector{UInt64})
+            
+            props = JSON3.read(Store.remove_quotes(row[5]), Dict{String, Any})
+            println("props: ", props)
 
             hll = SetCore.HllSet{p}()
             SetCore.restore(hll, dataset)
-            neo_node = Neo_node([labels], sha1, d_sha1, hll, props)
+            neo_node = Neo_node(labels, sha1, d_sha1, hll, props)
             hlls[sha1] = neo_node
         end
     end
@@ -110,7 +115,8 @@ module LisaNeo4j
         dataset = data.dataset
         card = data.card
         props = JSON3.write(data.props)
-        stmt = "MERGE (n:$labels {sha1: '$sha1', labels: '$labels', d_sha1: '$d_sha1', dataset: $dataset, card: $card, props: $props})"
+        label = join(JSON3.read(labels, Array{String, 1}), ":")  # replace(labels, r"[\"\[\]]" => "")
+        stmt = "MERGE (n:$label {sha1: '$sha1', labels: '$labels', d_sha1: '$d_sha1', dataset: '$dataset', card: $card, props: '$props'})"
         return cypher(stmt)
     end
 
