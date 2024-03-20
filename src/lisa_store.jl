@@ -58,7 +58,7 @@ module Store
                     # Register (book) the file in the assignmnets table
                     f_name = joinpath(root, file)
                     sha_1 = bytes2hex(sha1(f_name))
-                    println("sha1: ", sha_1)
+                    # println("sha1: ", sha_1)
                     
                     assign = Graph.Assignment(sha_1, root, f_name, ext, "book_file", "", "waiting")
                     Graph.replace!(db, assign)
@@ -432,7 +432,7 @@ module Store
         
         props = JSON3.read(node.props, Dict{String, Any})
         type_props = typeof(node.props)
-        println("props: $props", type_props)
+        # println("props: $props", type_props)
         commit_id = props["commit_id"]
         
         save_node(hdf5_filename, "/$commit_id/nodes/$sha1", labels, dataset, attributes=props)
@@ -520,7 +520,7 @@ module Store
     function save_node(file_name::String, group_name::String, dataset_name::String, 
         dataset::Vector{Int}; attributes::Dict = Dict())
 
-        println("save_node: $group_name, $dataset_name")
+        # println("save_node: $group_name, $dataset_name")
         h5open(file_name, "r+") do file
             if haskey(file, group_name) 
                 g = file[group_name]                
@@ -548,7 +548,7 @@ module Store
     function save_edge(file_name::String, group_name::String, dataset_name::String, 
         dataset::String; attributes::Dict = Dict())
         
-        println("save_node: $group_name, $dataset_name")  
+        # println("save_node: $group_name, $dataset_name")  
         h5open(file_name, "r+") do file
             # Check if the group already exists in the file
             if haskey(file, group_name) 

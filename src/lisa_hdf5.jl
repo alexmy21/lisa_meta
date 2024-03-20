@@ -84,7 +84,7 @@ function read_datasets(file_or_group, wildcard)
         item = file_or_group[name]
         if isa(item, HDF5.Dataset) && occursin(wildcard, string(item))
             data = read(item)
-            println("Read dataset '$name' with data: $data")
+            # println("Read dataset '$name' with data: $data")
         elseif isa(item, HDF5.Group)
             read_datasets(item, wildcard)
         end

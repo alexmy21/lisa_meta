@@ -50,11 +50,11 @@ module LisaNeo4j
             labels = JSON3.read(row[1], Array{String,1})
             sha1 = row[2]
             d_sha1 = row[3]
-            println(row[4])
+            # println(row[4])
             dataset = JSON3.read(row[4], Vector{UInt64})
             
             props = JSON3.read(Store.remove_quotes(row[5]), Dict{String, Any})
-            println("props: ", props)
+            # println("props: ", props)
 
             hll = SetCore.HllSet{p}()
             SetCore.restore(hll, dataset)
