@@ -1,4 +1,4 @@
-name = "lisa"
+name = "lisa_meta"
 uuid = "e9fcbae8-4250-46aa-8ea6-7f494ac8997c"
 authors = ["Alex Mylnikov <alexmy@lisa-park.com>"]
 version = "0.1.0"
@@ -10,6 +10,7 @@ Catlab = "134e5e36-593f-5add-ad60-77f754baafbe"
 DBInterface = "a10d1c49-ce27-4219-8d33-6db1a4562965"
 EasyConfig = "acab07b0-f158-46d4-8913-50acef6d41fe"
 HTTP = "cd3eb016-35fb-5094-929b-558a96fad6f3"
+IJulia = "7073ff75-c697-5162-941a-fcdaad2a7d2a"
 ImageMagick = "6218d12a-5da1-5696-b52f-db25d2ecc6d1"
 ImageTransformations = "02fcd773-0e25-5acc-982a-7f6622650795"
 Images = "916415d5-f1e6-5110-898d-aaa5f9f070e0"

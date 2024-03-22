@@ -48,7 +48,7 @@ module Store
         global g_seed = seed
         P = P
         # Update tokens table 
-        df = DataFrame(:id=>Int[], :bin=>Int[], :zeros=>Int[], :token=>String[], :refs=>String[])
+        # df = DataFrame(:id=>Int[], :bin=>Int[], :zeros=>Int[], :token=>String[], :refs=>String[])
         # Walk through the directory and its subdirectories
         for (root, dirs, files) in walkdir(Path(start_dir))
             # Check each file
@@ -522,11 +522,16 @@ module Store
 
         # println("save_node: $group_name, $dataset_name")
         h5open(file_name, "r+") do file
-            if haskey(file, group_name) 
+            # Check if file is not empty
+            if isempty(file)
+                return
+            end
+            # Check if the group already exists in the file
+            if HDF5.exists(file, group_name) 
                 g = file[group_name]                
             else
                 # Create a new group in the file
-                g = create_group(file, group_name)
+                g = g_create(file, group_name)
             end
             g[dataset_name] = dataset
             if isempty(attributes)
@@ -551,11 +556,11 @@ module Store
         # println("save_node: $group_name, $dataset_name")  
         h5open(file_name, "r+") do file
             # Check if the group already exists in the file
-            if haskey(file, group_name) 
+            if HDF5.exists(file, group_name) 
                 g = file[group_name]                
             else
                 # Create a new group in the file, if it doesn't exist
-                g = create_group(file, group_name)
+                g = g_create(file, group_name)
             end
             g[dataset_name] = dataset
             # Create attributes
@@ -569,14 +574,18 @@ module Store
     end
 
     # Function to recursively read datasets from an HDF5 file or group that match a wildcard
-    function read_datasets(file_or_group, data_out::Dict, wildcard)        
-        for name in keys(file_or_group)
+    function read_datasets(file_or_group, data_out::Dict, wildcard) 
+        if isempty(file_or_group)
+            return
+        end
+
+        for name in names(file_or_group)
             item = file_or_group[name]
-            if isa(item, HDF5.Dataset) && occursin(wildcard, string(item))
+            if isa(item, HDF5Dataset) && occursin(wildcard, string(item))
                 data = read(item)
                 data_out[name] = data
                 # println("Read dataset '$name' with data: $data")
-            elseif isa(item, HDF5.Group)
+            elseif isa(item, HDF5Group)
                 read_datasets(item, data_out, wildcard)
             end
         end

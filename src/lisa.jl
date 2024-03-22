@@ -1,2 +1,2 @@
 # Well, Hello everybody :)
-prinln("hello world")
+println("hello world")
