@@ -61,6 +61,7 @@ module SetCore
     using CSV
     using Arrow
     using Tables
+    using LinearAlgebra
 
     export HllSet, add!, count, union, intersect, diff, 
         isequal, isempty, id, delta, getbin, getzeros, maxidx, jaccard
@@ -249,6 +250,12 @@ module SetCore
         return (D = d, R = r, N = n)
     end
 
+    function cosine(hll_1::HllSet{P}, hll_2::HllSet{P}) where {P}
+        v1 = hll_1.counts
+        v2 = hll_2.counts
+        return dot(v1, v2) / (norm(v1) * norm(v2))
+    end
+
     function id(x::HllSet{P}) where {P}
         # Convert the Vector{BitVector} to a byte array
         bytearray = UInt8[]
@@ -260,7 +267,9 @@ module SetCore
         return SHA.bytes2hex(hash_value)
     end
 
-    # dump and restor functions
+    # dump  function: 
+    #   Convert the reversed BitVector to a UInt64
+    #   we reversed the BitVector to make integer smaller
     #--------------------------------------------------
     function Base.dump(x::SetCore.HllSet{P}) where {P}
         # For safety - this is also enforced in the HLL constructor
@@ -269,12 +278,15 @@ module SetCore
         end
         z = Vector{UInt64}(undef, length(x.counts))
         for i in 1:length(x.counts)
-            n = bits_to_ints(x.counts[i])
+            n = bits_to_ints(reverse(x.counts[i]))
             z[i] = n
         end
         return z
     end
 
+    # restore function
+    #   Assumes that integers in vector are generated from reversed bitvector 
+    #--------------------------------------------------
     function restore(z::SetCore.HllSet{P}, x::Vector{UInt64}) where {P} 
         # For safety - this is also enforced in the HLL constructor
         if P < 4 || P > 18
@@ -284,7 +296,7 @@ module SetCore
             error("The length of the vector must be equal to the length of the HllSet")
         end
         for i in 1:length(x)
-            y = ints_to_bits(x[i])
+            y = reverse(ints_to_bits(x[i]))
             z.counts[i] = z.counts[i] .| y
         end
         return z

@@ -1,0 +1,4 @@
+{
+    "sqltools.useNodeRuntime": true,
+    "julia.executablePath": "/snap/bin/julia"
+}
