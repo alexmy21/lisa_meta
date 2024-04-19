@@ -11,7 +11,7 @@ This is POC (prove of concept) application. The main purpose of this application
 - lisa_graph.jl
 - lisa_hdf5.jl
 - lisa_neo4j.jl
-- lisa_sets.jl (this is modified and enhanced version of the **lisa.jl** file in the lisa project. See git link above.)
+- lisa_sets.jl 
 - lisa_store.jl
 
 The following is short descriptions of each of these files. 
@@ -21,7 +21,7 @@ We will start with two main library files:
 - lisa_store.jl
 - lisa_neo4j.jl.
 
-First provides support for data ingestion and and building SQLiteDB presentation for the metadata graph. The second one is a tool that allows us to convert metadata graph in SQLiteDB into Neo4J Graph.
+First provides support for data ingestion and and building SQLiteDB presentation for the metadata graph. The second one is a tool that allows us to convert metadata graph from SQLiteDB into Neo4J Graph.
 
 ## lisa_store.jl
 
