@@ -1,10 +1,10 @@
-# lisa_meta: The Metadata Store (MDS) built with lisa framework
+# lisa_meta: The Metadata Store (MDS) built with lisa_sets framework
 
 ## Introduction
 
 This is POC (prove of concept) application. The main purpose of this application is to show how we can utilize HllSets introduced in:
 
-https://github.com/alexmy21/lisa.
+**2_README_poc**.md.
 
 **lisa_meta** is designed as a library and it includes the following files:
 

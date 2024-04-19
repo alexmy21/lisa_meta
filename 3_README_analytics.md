@@ -111,4 +111,8 @@ The following things we should keep in mind when we are working with HllSets:
    1. To get the actual HllSet for column we should use the union of the cell's HllSets of a given column;
    2. The same we should for row HllSets.
 
+## Running some demos
+
 The simple example is in the **lisa_analytics.ipynb**.
+
+In **julia_neo4j.ipynb** we are providing a simple code that allows us to visualize results obtained in the **lisa_analytics.ipynb** using Neo4J.
