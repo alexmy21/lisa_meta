@@ -104,7 +104,7 @@ As we learned in Domains and co-domains section, we can always trace the content
 
 The following things we should keep in mind when we are working with HllSets:
 
-1. The content of the cell is unordered collection of tokens from the original cell of CSV file. So, if you to know the order of those tokens, you should go to original CSV file.
+1. The content of the cell is unordered collection of tokens from the original cell of CSV file. So, if you want to know the order of those tokens, you should go to original CSV file.
 2. In many cases (as in the example that we are providing in the **lisa_analytica.ipynb**) we are using only a sample of rows. So, we should keep it in mind when we are working with this data.
 3. The correction is usually is simple:
 
