@@ -26,7 +26,7 @@ In **lisa_meta** this interpretation/conversion is done by implementing differen
 
 What is important, in this diagram each **token** from inverted index **tokens** is converted to the **hash** (unsigned 64 bit integer). This **hash** serves as a **token ID** in **tokens** index.
 
-In the **nodes** table each token ID is placed into the **HllSet** assigned for a given external dataset. **HllSet** is not just collection of another elements. It is a structure (kind of tensors) that has fixed number of rows (we called them **bins**) and each **bin** is a 64-bit BitVector. So, it is a 2 dimensional tensor after all.  
+In the **nodes** table each token ID is placed into the **HllSet** assigned for a given external dataset. **HllSet** is not just collection of another elements. It is a structure that has fixed number of rows (we called them **bins**) and each **bin** is a 64-bit BitVector.   
 
 The number of rows in this tensor is power of 2 - $2^p$, currently we are using $p = 10$. This allows us to keep the size of HllSet small enough (around 8KB) with a good accuracy of the cardinality calculation. **Note**, this size is a constant and it doesn't depend on the original dataset size. So, basically any dataset can be encoded in the HllSet not bigger than 8KB. If we need more precise cardinality estimation we can always increase it with bigger $p$.
 

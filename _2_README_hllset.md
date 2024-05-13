@@ -1,7 +1,3 @@
-> This project is discontinued and moved to new repository:
-> https://github.com/alexmy21/lisa_meta
-> 
-
 # LISA: HyperLogLog based approximation framework for very big Datasets
 
 ( **_If it looks like a duck, swims like a duck, and quacks like a duck, then it probably is a duck._** )
@@ -197,11 +193,11 @@ Normally we would use **max** of two integers in
 dest.counts[i] = max(dest.counts[i], src.counts[i])
 ```
 
-but with a new **struct** that represent HLL structure, we are using bitwise OR (.|) operation for BitVectors.
+but with a new **struct** that represents HLL structure, we are using bitwise OR (.|) operation for BitVectors.
 
 ### 3. Intersection (intersect)
 
-Intersection is a new operation, it is possible only because we switched from **Vector(Int)** to **Vector(BitVector)** in struct definition of **counters**.
+Intersection is a new operation, it is possible only because we switched from **Vector(Int)** to the **Vector(BitVector)** in struct definition of **counters**.
 
 ```julia
 function Base.intersect(x::HllSet{P}, y::HllSet{P}) where {P} 
@@ -213,6 +209,8 @@ function Base.intersect(x::HllSet{P}, y::HllSet{P}) where {P}
     return z
 end
 ```
+
+Return value of this fumction is a HllSet that we can use in other operations on a collection of HllSets.
 
 ### 4. Difference (diff)
 

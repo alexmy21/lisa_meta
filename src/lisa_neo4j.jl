@@ -114,9 +114,14 @@ module LisaNeo4j
         d_sha1 =  data.d_sha1
         dataset = data.dataset
         card = data.card
-        props = JSON3.write(data.props)
+        props = JSON3.read(data.props)
+        set_props = join(["\"$key\": \"$value\"" for (key, value) in pairs(props)], ",")
+        
         label = join(JSON3.read(labels, Array{String, 1}), ":")  # replace(labels, r"[\"\[\]]" => "")
-        stmt = "MERGE (n:$label {sha1: '$sha1', labels: '$labels', d_sha1: '$d_sha1', dataset: '$dataset', card: $card, props: '$props'})"
+        stmt = """MERGE (n:$label {sha1: '$sha1', labels: '$labels', d_sha1: '$d_sha1', dataset: '$dataset', card: $card}) 
+            SET n.props = '{$set_props}'
+        """
+        
         return cypher(stmt)
     end
 
@@ -133,8 +138,8 @@ module LisaNeo4j
         set_clause = join([" r.$(key) = '$(value)'" for (key, value) in pairs(row)], ",")
         # Build the Cypher query
         stmt = """
-        MATCH (a), (b) WHERE a.sha1 = '$source' AND b.sha1 = '$target'
-        MERGE (a)-[r:$r_type]->(b)
+            MATCH (a), (b) WHERE a.sha1 = '$source' AND b.sha1 = '$target'
+            MERGE (a)-[r:$r_type]->(b)
         SET $set_clause
         """
         return cypher(stmt)

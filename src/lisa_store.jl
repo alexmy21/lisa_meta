@@ -518,7 +518,7 @@ module Store
             - attributes: Dict of attributes
     """ 
     function save_node(file_name::String, group_name::String, dataset_name::String, 
-        dataset::Vector{Int}; attributes::Dict = Dict())
+        dataset::Union{Vector{Int}, String}; attributes::Dict = Dict())
 
         # println("save_node: $group_name, $dataset_name")
         h5open(file_name, "r+") do file

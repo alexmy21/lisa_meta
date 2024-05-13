@@ -62,6 +62,8 @@ module SetCore
     using Arrow
     using Tables
     using LinearAlgebra
+    using JSON3
+    using SparseArrays
 
     export HllSet, add!, count, union, intersect, diff, 
         isequal, isempty, id, delta, getbin, getzeros, maxidx, jaccard
@@ -129,11 +131,20 @@ module SetCore
         return z
     end
 
-    function Base.diff(x::HllSet{P}, y::HllSet{P}) where {P} 
+    function set_xor(x::HllSet{P}, y::HllSet{P}) where {P} 
         length(x.counts) == length(y.counts) || throw(ArgumentError("HllSet{P} must have same size"))
         z = HllSet{P}()
         for i in 1:length(x.counts)
-            z.counts[i] = x.counts[i] .& .~(y.counts[i])
+            z.counts[i] = xor.(x.counts[i], (y.counts[i]))
+        end
+        return z
+    end
+
+    function set_comp(x::HllSet{P}, y::HllSet{P}) where {P} 
+        length(x.counts) == length(y.counts) || throw(ArgumentError("HllSet{P} must have same size"))
+        z = HllSet{P}()
+        for i in 1:length(x.counts)
+            z.counts[i] = .~y.counts[i] .&x.counts[i]
         end
         return z
     end
@@ -189,7 +200,8 @@ module SetCore
         end
     
     
-    function bias(::HllSet{P}, biased_estimate) where {P}
+    
+        function bias(::HllSet{P}, biased_estimate) where {P}
         # For safety - this is also enforced in the HLL constructor
         if P < 4 || P > 18
             error("We only have bias estimates for P ∈ 4:18")
@@ -284,6 +296,17 @@ module SetCore
         return z
     end
 
+    # Returns JSON string of the sparse dump of counts
+    function dump_sparse(x::SetCore.HllSet{P}) where {P}
+        # For safety - this is also enforced in the HLL constructor
+        if P < 4 || P > 18
+            error("We only have bias estimates for P ∈ 4:18")
+        end
+        z = dump(x)
+        z_sparse = sparsevec(z)
+        return sparsevec_to_string(z_sparse)
+    end
+
     # restore function
     #   Assumes that integers in vector are generated from reversed bitvector 
     #--------------------------------------------------
@@ -300,6 +323,31 @@ module SetCore
             z.counts[i] = z.counts[i] .| y
         end
         return z
+    end
+
+    function restore(z::SetCore.HllSet{P}, x::String) where {P} 
+        # For safety - this is also enforced in the HLL constructor
+        if P < 4 || P > 18
+            error("We only have bias estimates for P ∈ 4:18")
+        end
+        z_dump = sparsevec_from_string(x)
+        return restore(x, Vector(z_dump))
+    end
+
+    # Sparse Vector conversion functions
+    #--------------------------------------------------
+    function sparsevec_to_string(sparse_vector::SparseVector)
+        # Convert the sparse vector to an array of tuples
+        sparse_vector_tuples = [(i, sparse_vector[i]) for i in findnz(sparse_vector)[1]]
+        # Convert the array of tuples to a JSON string
+        return JSON3.write(sparse_vector_tuples)
+    end
+
+    function sparsevec_from_string(sparse_vector_str::String)
+        # Parse the string into an array of tuples
+        parsed_tuples = JSON3.read(sparse_vector_str)
+        # Convert the array of tuples back into a sparse vector
+        return sparsevec([i[1] for i in parsed_tuples], [i[2] for i in parsed_tuples])
     end
 
     # The following functions are used to convert between UInt64 and BitVector

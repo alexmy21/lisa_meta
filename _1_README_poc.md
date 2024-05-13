@@ -11,10 +11,10 @@ This is POC (prove of concept) application. The main purpose of this application
 - lisa_graph.jl
 - lisa_hdf5.jl
 - lisa_neo4j.jl
-- lisa_sets.jl 
+- lisa_sets.jl
 - lisa_store.jl
 
-The following is short descriptions of each of these files. 
+The following is short descriptions of each of these files.
 
 We will start with two main library files:
 
@@ -39,8 +39,8 @@ In lisa_meta metadata represented as a collection of nodes (the actual metadata)
 - nodes with a following structure:
   
   - sha1 (SHA1 based node ID);
-  - labels (graph labels that we are going to assign to the noe);
-  - d_sha1 (SHA1 ID that represent ID the HllSet presentation of the original dataset);
+  - labels (graph labels that we are going to assign to the node);
+  - d_sha1 (SHA1 ID that represent ID of the HllSet presentation of the original dataset);
   - dataset (compact dump of the HllSet);
   - props (a dictionary structure to hold additional properties);
 - edges:
@@ -48,7 +48,7 @@ In lisa_meta metadata represented as a collection of nodes (the actual metadata)
   - source (sha1 of the source node in relation);
   - target (sha1 of the target node in relation);
   - r_type (label that we are assigning to the edge);
-  - props (dict structure for additional properties). 
+  - props (dict structure for additional properties).
 
 The modifications represent the history of the original data and should be managed the same way how we are managing version in, for example, github.
 
