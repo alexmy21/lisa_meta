@@ -4,7 +4,7 @@
 
 This is POC (prove of concept) application. The main purpose of this application is to show how we can utilize HllSets introduced in:
 
-**2_README_poc**.md.
+**_2_README_hllset**.md.
 
 **lisa_meta** is designed as a library and it includes the following files:
 
