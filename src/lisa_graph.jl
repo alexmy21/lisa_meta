@@ -523,10 +523,12 @@ module Graph
         result = query(db, "*", table_name, "source LIKE '$source' AND target LIKE '$target'")
         (Edge(row) for row in result)
     end
+
     function getedge(db::DB, source::String, ::Colon, r_type::AbstractString; table_name::String="edges")
         result = query(db, "*", table_name, "source LIKE '$source' AND r_type LIKE '$r_type'")
         (Edge(row) for row in result)
     end
+
     function getedge(db::DB, ::Colon, target::String, r_type::AbstractString; table_name::String="edges")
         result = query(db, "*", table_name, "target LIKE '$target' AND r_type LIKE '$r_type'")
         (Edge(row) for row in result)
@@ -537,10 +539,12 @@ module Graph
         result = query(db, "*", table_name, "source LIKE '$source'")
         (Edge(row) for row in result)
     end
+
     function getedge(db::DB, ::Colon, target::String, ::Colon; table_name::String="edges")
         result = query(db, "*", table_name, "target LIKE '$target'")
         (Edge(row) for row in result)
     end
+
     function getedge(db::DB, ::Colon, ::Colon, r_type::AbstractString; table_name::String="edges")
         result = query(db, "*", table_name, "r_type LIKE '$r_type'")
         (Edge(row) for row in result)
@@ -593,4 +597,5 @@ module Graph
     function json_to_set(json_str::String)
         return Set(JSON3.read(json_str))
     end
+    
 end
