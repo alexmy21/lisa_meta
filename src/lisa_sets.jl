@@ -198,10 +198,11 @@ module SetCore
         else
             return 0.7213 / (1 + 1.079 / sizeof(x))
         end
+        
     
     
     
-        function bias(::HllSet{P}, biased_estimate) where {P}
+    function bias(::HllSet{P}, biased_estimate) where {P}
         # For safety - this is also enforced in the HLL constructor
         if P < 4 || P > 18
             error("We only have bias estimates for P ∈ 4:18")
@@ -283,7 +284,7 @@ module SetCore
     #   Convert the reversed BitVector to a UInt64
     #   we reversed the BitVector to make integer smaller
     #--------------------------------------------------
-    function Base.dump(x::SetCore.HllSet{P}) where {P}
+    function Base.dump(x::HllSet{P}) where {P}
         # For safety - this is also enforced in the HLL constructor
         if P < 4 || P > 18
             error("We only have bias estimates for P ∈ 4:18")
@@ -297,7 +298,7 @@ module SetCore
     end
 
     # Returns JSON string of the sparse dump of counts
-    function dump_sparse(x::SetCore.HllSet{P}) where {P}
+    function dump_sparse(x::HllSet{P}) where {P}
         # For safety - this is also enforced in the HLL constructor
         if P < 4 || P > 18
             error("We only have bias estimates for P ∈ 4:18")
@@ -310,7 +311,7 @@ module SetCore
     # restore function
     #   Assumes that integers in vector are generated from reversed bitvector 
     #--------------------------------------------------
-    function restore(z::SetCore.HllSet{P}, x::Vector{UInt64}) where {P} 
+    function restore(z::HllSet{P}, x::Vector{UInt64}) where {P} 
         # For safety - this is also enforced in the HLL constructor
         if P < 4 || P > 18
             error("We only have bias estimates for P ∈ 4:18")
@@ -325,7 +326,7 @@ module SetCore
         return z
     end
 
-    function restore(z::SetCore.HllSet{P}, x::String) where {P} 
+    function restore(z::HllSet{P}, x::String) where {P} 
         # For safety - this is also enforced in the HLL constructor
         if P < 4 || P > 18
             error("We only have bias estimates for P ∈ 4:18")

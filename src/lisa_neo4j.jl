@@ -35,6 +35,7 @@ module LisaNeo4j
     Neo_node(sha1::String, labels::String...; d_sha1::String="", card::Int, hll_set::SetCore.HllSet, props::Dict{String, Any}) = 
         Neo_node(sha1, collect(labels), d_sha1, card, hll_set, EasyConfig(props))
 
+    
     function request(url, headers, query)
         response = HTTP.request("POST", url, headers, query)
         return JSON3.read(IOBuffer(String(response.body)))
@@ -77,22 +78,6 @@ module LisaNeo4j
         return refs
     end
 
-    function select_edges(db::SQLite.DB, refs::Set, edges::Vector) 
-        edges_refs = Set()
-        for ref in refs
-            # println("ref: ", ref)
-            results = DBInterface.
-                execute(db, "SELECT source, target, r_type, props FROM edges WHERE source=? OR target=?;", [ref, ref]) |> DataFrame
-            for result in eachrow(results)
-                if length(result) > 0
-                    push!(edges, result)
-                    edges_refs = union(edges_refs, Set([result.source, result.target]))
-                end
-            end
-        end
-        return edges_refs
-    end
-
     function select_nodes(db::SQLite.DB, refs::Set, nodes::Vector) 
         for ref in refs
             # println("ref: ", ref)
@@ -125,6 +110,34 @@ module LisaNeo4j
         return cypher(stmt)
     end
 
+    function add_neo4j_nodes_by_refs(db::SQLite.DB, refs::Set, url, headers)
+        nodes = Vector()
+        LisaNeo4j.select_nodes(db, refs, nodes)
+
+        # Add nodes to the Neo4j database
+        for node in nodes
+            labels = replace(string(node.labels), ";" => "")
+            query = LisaNeo4j.add_neo4j_node(labels, node)
+            data = LisaNeo4j.request(url, headers, query)
+        end
+    end
+
+    function select_edges(db::SQLite.DB, refs::Set, edges::Vector) 
+        edges_refs = Set()
+        for ref in refs
+            # println("ref: ", ref)
+            results = DBInterface.
+                execute(db, "SELECT source, target, r_type, props FROM edges WHERE source=? OR target=?;", [ref, ref]) |> DataFrame
+            for result in eachrow(results)
+                if length(result) > 0
+                    push!(edges, result)
+                    edges_refs = union(edges_refs, Set([result.source, result.target]))
+                end
+            end
+        end
+        return edges_refs
+    end
+
     """
         This function creates a new edge in the Neo4j database.
     """
@@ -134,15 +147,32 @@ module LisaNeo4j
         r_type = data.r_type
         # Parse the properties
         row = JSON3.read(data.props)
-        # Build the SET clause dynamically
-        set_clause = join([" r.$(key) = '$(value)'" for (key, value) in pairs(row)], ",")
+        
         # Build the Cypher query
         stmt = """
             MATCH (a), (b) WHERE a.sha1 = '$source' AND b.sha1 = '$target'
             MERGE (a)-[r:$r_type]->(b)
-        SET $set_clause
         """
+        if length(row) > 0
+            # Build the SET clause dynamically
+            set_clause = join([" r.$(key) = '$(value)'" for (key, value) in pairs(row)], ",")
+
+            stmt *= " SET $set_clause"
+        end
         return cypher(stmt)
+    end
+
+    function add_neo4j_edges_by_refs(db::SQLite.DB, refs::Set, url, headers)
+        edges = Vector()
+        LisaNeo4j.select_edges(db, refs, edges)
+        # println("edges: ", edges)
+
+        # Add edges to the Neo4j database
+        for edge in edges
+            query = add_neo4j_edge(edge)
+            # println("query: ", query)
+            data = request(url, headers, query)
+        end
     end
 
     # Utility functions

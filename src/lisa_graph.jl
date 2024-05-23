@@ -28,9 +28,14 @@ I borrowed a lot from this project, but also made a lot of changes,
 so, for all errors do not blame the original author but me.
 """
 
+
+include("lisa_sets.jl")
 include("lisa_util.jl")
 
 module Graph
+
+    using ..SetCore
+    using ..Util
 
     using SQLite: SQLite
     using DBInterface
@@ -509,6 +514,111 @@ module Graph
     function getnode(db::DB, ::Colon, label::String; table_name::String="nodes") 
         result = query(db, "*", table_name, "labels LIKE '%$label%'")
         (Node(row) for row in result)
+    end
+
+    # Nodes relational operations
+    #-----------------------------------------------------------------------------#
+    function node_union(db::DB, nodes::Vector; p::Int64=10)        
+        sha1s = []
+        hll = SetCore.HllSet{p}()
+        for node in nodes
+                push!(sha1s, node.sha1)
+                restored = SetCore.HllSet{p}()
+                restored = SetCore.restore(restored, JSON3.read(node.dataset, Vector{UInt64}))
+                hll = SetCore.union!(hll, restored)
+        end
+        sha1 = Util.sha1_union(string.(sha1s))
+        # Create all edges
+        for _sha1 in sha1s
+                new_edge = Edge(_sha1, sha1, "union", Config())
+                replace!(db, new_edge)
+        end
+        d_sha1 = SetCore.id(hll)
+        card = SetCore.count(hll)
+        dataset = SetCore.dump(hll)
+        props = Config()    
+        new_node = Node(sha1, ["union"], d_sha1, card, dataset, props)
+        replace!(db, new_node)
+        push!(sha1s, sha1)
+        return sha1s
+    end
+
+    function node_intersect(db::DB, x::DataFrameRow, y::DataFrameRow; p::Int64=10)
+        sha1s = []
+        hll = SetCore.HllSet{p}()
+        # for node in nodes
+        push!(sha1s, x.sha1)
+        push!(sha1s, y.sha1)
+        restored_x = SetCore.HllSet{p}()
+        restored_x = SetCore.restore(restored_x, JSON3.read(x.dataset, Vector{UInt64}))
+        restored_y = SetCore.HllSet{p}()
+        restored_y = SetCore.restore(restored_y, JSON3.read(y.dataset, Vector{UInt64}))
+        hll = SetCore.intersect(restored_x, restored_y)
+        # end
+        sha1 = Util.sha1_intersect(string.(sha1s))
+        # Create all edges
+        for _sha1 in sha1s
+                new_edge = Edge(_sha1, sha1, "intersect", Config())
+                replace!(db, new_edge)
+        end
+        d_sha1 = SetCore.id(hll)
+        card = SetCore.count(hll)
+        dataset = SetCore.dump(hll)
+        props = Config()    
+        new_node = Node(sha1, ["intersect"], d_sha1, card, dataset, props)
+        replace!(db, new_node)
+        push!(sha1s, sha1)
+        return sha1s
+    end
+
+    function node_comp(db::DB, x::DataFrameRow, y::DataFrameRow; p::Int64=10)
+        sha1s = []
+        hll = SetCore.HllSet{p}()
+        for node in nodes
+                push!(sha1s, node.sha1)
+                restored = SetCore.HllSet{p}()
+                restored = SetCore.restore(restored, JSON3.read(node.dataset, Vector{UInt64}))
+                hll = SetCore.union!(hll, restored)
+        end
+        sha1 = Util.sha1_union(string.(sha1s))
+        # Create all edges
+        for _sha1 in sha1s
+                new_edge = Edge(_sha1, sha1, "union", Config())
+                replace!(db, new_edge)
+        end
+        d_sha1 = SetCore.id(hll)
+        card = SetCore.count(hll)
+        dataset = SetCore.dump(hll)
+        props = Config()    
+        new_node = Node(sha1, ["union"], d_sha1, card, dataset, props)
+        replace!(db, new_node)
+        push!(sha1s, sha1)
+        return sha1s
+    end
+
+    function node_xor(db::DB, nodes::Vector{Node})
+        sha1s = []
+        hll = SetCore.HllSet{p}()
+        for node in nodes
+                push!(sha1s, node.sha1)
+                restored = SetCore.HllSet{p}()
+                restored = SetCore.restore(restored, JSON3.read(node.dataset, Vector{UInt64}))
+                hll = SetCore.union!(hll, restored)
+        end
+        sha1 = Util.sha1_union(string.(sha1s))
+        # Create all edges
+        for _sha1 in sha1s
+                new_edge = Edge(_sha1, sha1, "union", Config())
+                replace!(db, new_edge)
+        end
+        d_sha1 = SetCore.id(hll)
+        card = SetCore.count(hll)
+        dataset = SetCore.dump(hll)
+        props = Config()    
+        new_node = Node(sha1, ["union"], d_sha1, card, dataset, props)
+        replace!(db, new_node)
+        push!(sha1s, sha1)
+        return sha1s
     end
 
     #-----------------------------------------------------------------------------# getindex (Edge)
