@@ -543,7 +543,7 @@ module Graph
         return sha1s
     end
 
-    function node_intersect(db::DB, x::DataFrameRow, y::DataFrameRow; p::Int64=10)
+    function node_intersect(db::DB, x::DataFrameRow, y::DataFrameRow; label::String="intersect", p::Int64=10)
         sha1s = []
         hll = SetCore.HllSet{p}()
         # for node in nodes
@@ -558,14 +558,17 @@ module Graph
         sha1 = Util.sha1_intersect(string.(sha1s))
         # Create all edges
         for _sha1 in sha1s
-                new_edge = Edge(_sha1, sha1, "intersect", Config())
-                replace!(db, new_edge)
+            props = Config()
+            new_edge = Edge(_sha1, sha1, label, props)
+            replace!(db, new_edge)
         end
         d_sha1 = SetCore.id(hll)
         card = SetCore.count(hll)
         dataset = SetCore.dump(hll)
-        props = Config()    
-        new_node = Node(sha1, ["intersect"], d_sha1, card, dataset, props)
+        props = Config()        
+        props["row"] = x.sha1
+        props["column"] = y.sha1    
+        new_node = Node(sha1, [label], d_sha1, card, dataset, props)
         replace!(db, new_node)
         push!(sha1s, sha1)
         return sha1s
@@ -618,6 +621,22 @@ module Graph
         new_node = Node(sha1, ["union"], d_sha1, card, dataset, props)
         replace!(db, new_node)
         push!(sha1s, sha1)
+        return sha1s
+    end
+
+    function projection_1_n(db::DB, row::DataFrameRow, cols::Vector; label::String="projection_1_n", p::Int64=10)
+        sha1s = []
+        for col in cols
+            sha1s = union(sha1s, node_intersect(db, row, col; label=label, p=p))
+        end
+        return sha1s
+    end
+
+    function projection_m_n(db::DB, rows::Vector, cols::Vector; label::String="projection_m_n", p::Int64=10)
+        sha1s = []
+        for row in rows
+            sha1s = union(sha1s, projection_1_n(db, row, cols))
+        end
         return sha1s
     end
 

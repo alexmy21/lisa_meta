@@ -81,7 +81,7 @@ module LisaMeta
         return hll
     end
 
-    function select_nodes_by_label(db::Graph.DB, label::String, table::String, n::Int)
+    function select_sha1_by_label(db::Graph.DB, label::String, table::String, n::Int)
         refs = Set()
         query = ""
         if n == -1
@@ -100,7 +100,7 @@ module LisaMeta
         return refs
     end
 
-    function select_nodes_by_query(db::Graph.DB, query::String, n::Int)
+    function select_sha1_by_query(db::Graph.DB, query::String, n::Int)
         refs = Set()
         # query = ""
         if n > 0
