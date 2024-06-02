@@ -91,6 +91,18 @@ module LisaNeo4j
         return nodes
     end
 
+    function select_nodes(db::SQLite.DB, query::String, nodes::Vector) 
+        
+        results = DBInterface.execute(db, query) |> DataFrame
+        for result in eachrow(results)
+            if length(result) > 0
+                push!(nodes, result)
+            end
+        end
+        
+        return nodes
+    end
+
     """
         This function creates a new node in the Neo4j database.
     """
@@ -103,22 +115,36 @@ module LisaNeo4j
         set_props = join(["\"$key\": \"$value\"" for (key, value) in pairs(props)], ",")
         
         label = join(JSON3.read(labels, Array{String, 1}), ":")  # replace(labels, r"[\"\[\]]" => "")
-        stmt = """MERGE (n:$label {sha1: '$sha1', labels: '$labels', d_sha1: '$d_sha1', dataset: '$dataset', card: $card}) 
-            SET n.props = '{$set_props}'
+        # stmt = """MERGE (n:$label {sha1: '$sha1', labels: '$labels', d_sha1: '$d_sha1', dataset: '$dataset', card: $card}) 
+        #     SET n.props = '{$set_props}'
+        # """
+        stmt = """MERGE (n:$label {sha1: '$sha1'}) 
+            ON CREATE SET n = {sha1: '$sha1', labels: '$labels', d_sha1: '$d_sha1', dataset: '$dataset', card: $card, props: '{$set_props}'}
+            ON MATCH SET n.labels = '$labels', n.d_sha1 = '$d_sha1', n.dataset = '$dataset', n.card = $card, n.props = '{$set_props}'
         """
         
         return cypher(stmt)
     end
 
+    function add_neo4j_nodes(data::DataFrame, url, headers)
+        # Add nodes to the Neo4j database
+        for row in eachrow(data)
+            labels = row.labels
+            query = add_neo4j_node(labels, row)
+            data = request(url, headers, query)
+        end
+    end
+
     function add_neo4j_nodes_by_refs(db::SQLite.DB, refs::Set, url, headers)
         nodes = Vector()
-        LisaNeo4j.select_nodes(db, refs, nodes)
+        select_nodes(db, refs, nodes)
+        println("nodes: ", nodes)
 
         # Add nodes to the Neo4j database
         for node in nodes
             labels = replace(string(node.labels), ";" => "")
-            query = LisaNeo4j.add_neo4j_node(labels, node)
-            data = LisaNeo4j.request(url, headers, query)
+            query = add_neo4j_node(labels, node)
+            data = request(url, headers, query)
         end
     end
 
@@ -136,6 +162,14 @@ module LisaNeo4j
             end
         end
         return edges_refs
+    end
+
+    function add_neo4j_edges(data::DataFrame, url, headers)
+        # Add edges to the Neo4j database
+        for row in eachrow(data)
+            query = add_neo4j_edge(row)
+            data = request(url, headers, query)
+        end
     end
 
     """
@@ -164,7 +198,7 @@ module LisaNeo4j
 
     function add_neo4j_edges_by_refs(db::SQLite.DB, refs::Set, url, headers)
         edges = Vector()
-        LisaNeo4j.select_edges(db, refs, edges)
+        select_edges(db, refs, edges)
         # println("edges: ", edges)
 
         # Add edges to the Neo4j database

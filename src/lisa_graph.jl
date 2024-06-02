@@ -574,28 +574,101 @@ module Graph
         return sha1s
     end
 
-    function node_comp(db::DB, x::DataFrameRow, y::DataFrameRow; p::Int64=10)
+    function node_comp(db::DB, x::DataFrameRow, y::DataFrameRow; label::String="comp", p::Int64=10)
         sha1s = []
         hll = SetCore.HllSet{p}()
-        for node in nodes
-                push!(sha1s, node.sha1)
-                restored = SetCore.HllSet{p}()
-                restored = SetCore.restore(restored, JSON3.read(node.dataset, Vector{UInt64}))
-                hll = SetCore.union!(hll, restored)
-        end
-        sha1 = Util.sha1_union(string.(sha1s))
+        # for node in nodes
+        push!(sha1s, x.sha1)
+        push!(sha1s, y.sha1)
+        restored_x = SetCore.HllSet{p}()
+        restored_x = SetCore.restore(restored_x, JSON3.read(x.dataset, Vector{UInt64}))
+        restored_y = SetCore.HllSet{p}()
+        restored_y = SetCore.restore(restored_y, JSON3.read(y.dataset, Vector{UInt64}))
+        hll = SetCore.set_comp(restored_x, restored_y)
+        # end
+        sha1 = Util.sha1_comp(x.sha1, y.sha1)
         # Create all edges
         for _sha1 in sha1s
-                new_edge = Edge(_sha1, sha1, "union", Config())
-                replace!(db, new_edge)
+            props = Config()
+            new_edge = Edge(_sha1, sha1, label, props)
+            replace!(db, new_edge)
         end
         d_sha1 = SetCore.id(hll)
         card = SetCore.count(hll)
         dataset = SetCore.dump(hll)
-        props = Config()    
-        new_node = Node(sha1, ["union"], d_sha1, card, dataset, props)
+        props = Config()        
+        props["first"] = x.sha1
+        props["second"] = y.sha1    
+        new_node = Node(sha1, [label], d_sha1, card, dataset, props)
         replace!(db, new_node)
         push!(sha1s, sha1)
+        return sha1s
+    end
+
+    """
+        Tis function calculates the difference between two states (hll_1 and hll_2) of the same node.
+        Difference presented as a set of three nodes:
+        
+        1. N - New in hll_1
+        2. R - Retained in hll_1 from hll_2
+        3. D - Deleted from hll_1
+
+        The main purpose of this function is to monitor changes in the node.dataset.
+    """
+    function node_diff(db::DB, x::DataFrameRow, y::DataFrameRow; label::String="diff", p::Int64=10)
+        # Check if the nodes have the same sha1
+        if x.sha1 != y.sha1
+            error("The nodes have different sha1")
+        end
+        sha1s = []
+        push!(sha1s, x.sha1)
+        # push!(sha1s, y.sha1)
+        # Restore nodes x and y
+        hll_1 = SetCore.HllSet{p}()
+        hll_1 = SetCore.restore(hll_1, JSON3.read(x.dataset, Vector{UInt64}))
+        hll_2 = SetCore.HllSet{p}()
+        hll_2 = SetCore.restore(hll_2, JSON3.read(y.dataset, Vector{UInt64}))
+
+        # To ensure the uniqueness of generated sha1s for N, R, and D
+        # we are going to combine sha1 and commit id of the hll_1
+        arr_x = Array{String, 1}(undef, 2)
+        arr_x[1] = x.sha1
+        props_x = JSON3.read(x.props, Config)
+        arr_x[2] = JSON3.write(x.labels)
+        sha1_commit_x = Util.sha1_union(arr_x)
+        arr_y = Array{String, 1}(undef, 2)
+        arr_y[1] = y.sha1
+        props_y = JSON3.read(y.props, Config)
+        arr_y[2] = props_y["commit_id"]
+        sha1_commit_y = Util.sha1_union(arr_y)
+
+        delta = SetCore.diff(hll_1, hll_2)
+        for (name, value) in pairs(delta)
+            # println(name, " ", value)
+            # Add new edge
+            arr = Array{String, 1}(undef, 2)
+            arr[1] = sha1_commit_x
+            arr[2] = string(name)
+            sha1 = Util.sha1_union(arr)
+            props_e = Config()
+            props_e["commit_id"] = props_x["commit_id"]
+            edge = Edge(sha1, x.sha1, string(name), props_e)
+            replace!(db, edge)
+            # Add new node
+            d_sha1 = SetCore.id(value)
+            card = SetCore.count(value)
+            dataset = SetCore.dump(value)
+            props_n = Config()        
+            props_n["this"] = x.sha1
+            props_n["this_card"] = x.card
+            props_n["prev"] = y.sha1 
+            props_n["prev_card"] = y.card
+            props_n["commit_id"] = props_x["commit_id"]   
+            node = Node(sha1, [string(name)], d_sha1, card, dataset, props_n)
+            push!(sha1s, sha1)
+            replace!(db, node)
+        end
+        # println("delta ", delta)
         return sha1s
     end
 

@@ -256,11 +256,20 @@ module SetCore
     end
 
     function Base.diff(hll_1::HllSet{P}, hll_2::HllSet{P}) where {P}
-        x = count(intersect(hll_1, hll_2))
-        d = count(hll_1) - x
-        r = x
-        n = count(hll_2) - x
-        return (D = d, R = r, N = n)
+        # x = count(intersect(hll_1, hll_2))
+        # d = count(hll_1) - x
+        # r = x
+        # n = count(hll_2) - x
+        # return (D = d, R = r, N = n)
+        n = HllSet{P}()
+        d = HllSet{P}()
+        r = HllSet{P}()
+
+        n = set_comp(hll_1, hll_2)
+        d = set_comp(hll_2, hll_1)
+        r = intersect(hll_1, hll_2)
+
+        return (DEL = d, RET = r, NEW = n)
     end
 
     function cosine(hll_1::HllSet{P}, hll_2::HllSet{P}) where {P}

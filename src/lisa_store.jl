@@ -409,18 +409,37 @@ module Store
             if !isempty(nodes)
                 node = nodes[1, :]
                 # Compare the props fields
-                if JSON3.read(row.props) != JSON3.read(node.props)
-                    export_node(db, node, hdf5_filename)
+                if row.card != node.card || JSON3.read(row.props) != JSON3.read(node.props)                    
+                    # Remove diff edges (HEW, RET, DEL) for if they exist
+                    DBInterface.execute(db.sqlitedb, """DELETE FROM edges WHERE target ='$t_sha1' AND r_type IN ('NEW', 'RET', 'DEL')""")
                     # Remove the node from nodes
                     DBInterface.execute(db.sqlitedb, """DELETE FROM nodes WHERE sha1 ='$t_sha1'""")
+                    # Remove diff nodes (NEW, RET, DEL) for if they exist
+                    DBInterface.execute(db.sqlitedb, raw"DELETE FROM nodes WHERE json_extract(props, '$.this')" * " = '$t_sha1'")
+                    # println("Exporting node: ", t_sha1)
+                    export_node(db, node, hdf5_filename)
+
+                    # Calculate difference between new and old version of the node and 
+                    # Generate 3 nodes (NEW, RET, and DEL) and 3 edges (NEW, RET, and DEL)
+                    # to represent the difference
+                    #--------------------------------------------------
+                    Graph.node_diff(db, row, node)
+                    #--------------------------------------------------
+                    # Load node tp nodes 
+
+                    dataset = JSON3.read(row.dataset, Vector{Int})
+                    props = JSON3.read(row.props, Dict{String, Any})
+                    labels = row.labels
+                    labels = JSON3.read(labels, Array{String, 1})
+                    g_node = Graph.Node(row.sha1, labels, row.d_sha1, row.card, dataset, props)
+                    Graph.replace!(db, g_node, table_name="nodes")
                 end
             end
             # Remove the node from t_nodes
             DBInterface.execute(db.sqlitedb, """DELETE FROM t_nodes WHERE sha1 ='$t_sha1'""") 
             # Delete the record from the nodes table
             DBInterface.execute(db.sqlitedb, "DELETE FROM assignments WHERE id = '$t_sha1'")
-            # Load node tp nodes           
-            SQLite.load!(DataFrame(row), db.sqlitedb, "nodes")
+            
         end        
     end
 
@@ -522,10 +541,7 @@ module Store
 
         # println("save_node: $group_name, $dataset_name")
         h5open(file_name, "r+") do file
-            # Check if file is not empty
-            if isempty(file)
-                return
-            end
+            println("file: ", isempty(file))
             # Check if the group already exists in the file
             if HDF5.exists(file, group_name) 
                 g = file[group_name]                
@@ -553,7 +569,6 @@ module Store
     function save_edge(file_name::String, group_name::String, dataset_name::String, 
         dataset::String; attributes::Dict = Dict())
         
-        # println("save_node: $group_name, $dataset_name")  
         h5open(file_name, "r+") do file
             # Check if the group already exists in the file
             if HDF5.exists(file, group_name) 

@@ -16,6 +16,7 @@ module LisaMeta
     using Base64
     using DataFrames
     using EasyConfig
+    using HDF5
 
     # Getting emails by date
     function get_emails_by_date(db, date)
