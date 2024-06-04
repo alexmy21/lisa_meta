@@ -202,7 +202,16 @@ module Store
         file_props["file_name"] = file_name
         file_props["file_type"] = file.a_type
 
-        for row in CSV.Rows(file_name; limit=limit, offset=offset)
+        rows = CSV.Rows(file_name)
+        i = 0
+        for row in rows
+            i = i + 1
+            if(i < offset)
+                continue
+            end
+            if(i > (offset + limit) && limit != -1)
+                break
+            end
             dataset = collect(skipmissing(row))
             # println("row: ", dataset)
             row_sha1 = bytes2hex(sha1(join(dataset)))
@@ -540,23 +549,27 @@ module Store
         dataset::Union{Vector{Int}, String}; attributes::Dict = Dict())
 
         # println("save_node: $group_name, $dataset_name")
-        h5open(file_name, "r+") do file
-            println("file: ", isempty(file))
-            # Check if the group already exists in the file
-            if HDF5.exists(file, group_name) 
-                g = file[group_name]                
-            else
+        try
+            h5open(file_name, "r+") do file
+                # println("file: ", isempty(file))
+                # # Check if the group already exists in the file
+                # if HDF5.exist(file, group_name) 
+                #     g = file[group_name]                
+                # else
                 # Create a new group in the file
-                g = g_create(file, group_name)
-            end
-            g[dataset_name] = dataset
-            if isempty(attributes)
-                return
-            end
-            for(key, value) in attributes
-                attrs(g[dataset_name])[key] = value
-            end 
-        end     
+                g = create_group(file, group_name)
+                # end
+                g[dataset_name] = dataset
+                if isempty(attributes)
+                    return
+                end
+                for(key, value) in attributes
+                    attrs(g[dataset_name])[key] = value
+                end
+            end        
+        catch e
+            println("save_node error: $e")
+        end      
     end
 
     """
@@ -569,43 +582,47 @@ module Store
     function save_edge(file_name::String, group_name::String, dataset_name::String, 
         dataset::String; attributes::Dict = Dict())
         
-        h5open(file_name, "r+") do file
-            # Check if the group already exists in the file
-            if HDF5.exists(file, group_name) 
-                g = file[group_name]                
-            else
+        try
+            h5open(file_name, "r+") do file
+                # Check if the group already exists in the file
+                # if HDF5.exist(file, group_name) 
+                #     g = file[group_name]                
+                # else
                 # Create a new group in the file, if it doesn't exist
-                g = g_create(file, group_name)
-            end
-            g[dataset_name] = dataset
-            # Create attributes
-            if isempty(attributes)
-                return
-            end
-            for(key, value) in attributes
-                attrs(g[dataset_name])[key] = value
+                g = create_group(file, group_name)
+                # end
+                g[dataset_name] = dataset
+                # Create attributes
+                if isempty(attributes)
+                    return
+                end
+                for(key, value) in attributes
+                    attrs(g[dataset_name])[key] = value
+                end 
             end 
-        end    
+        catch e
+            println("save_edge error: $e")
+        end   
     end
 
     # Function to recursively read datasets from an HDF5 file or group that match a wildcard
-    function read_datasets(file_or_group, data_out::Dict, wildcard) 
-        if isempty(file_or_group)
-            return
-        end
+    # function read_datasets(file_or_group, data_out::Dict, wildcard) 
+    #     if isempty(file_or_group)
+    #         return
+    #     end
 
-        for name in names(file_or_group)
-            item = file_or_group[name]
-            if isa(item, HDF5Dataset) && occursin(wildcard, string(item))
-                data = read(item)
-                data_out[name] = data
-                # println("Read dataset '$name' with data: $data")
-            elseif isa(item, HDF5Group)
-                read_datasets(item, data_out, wildcard)
-            end
-        end
-        return data_out
-    end
+    #     for name in names(file_or_group)
+    #         item = file_or_group[name]
+    #         if isa(item, HDF5Dataset) && occursin(wildcard, string(item))
+    #             data = read(item)
+    #             data_out[name] = data
+    #             # println("Read dataset '$name' with data: $data")
+    #         elseif isa(item, HDF5Group)
+    #             read_datasets(item, data_out, wildcard)
+    #         end
+    #     end
+    #     return data_out
+    # end
 
     function retrieve(hdf5_file::String, hdf5_path::String)    
         h5open(hdf5_file, "r") do file

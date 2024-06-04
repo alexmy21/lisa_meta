@@ -116,23 +116,7 @@ module LisaMeta
             end
         end
         return refs
-    end
-
-    function print_hdf5_tree(obj, indent="", limit = 100)
-        i = 0
-        for name in names(obj)
-            if i > limit
-                println(indent, "...")
-                break
-            end
-            child = obj[name]
-            println(indent, name)
-            if isa(child, HDF5Group)
-                print_hdf5_tree(child, indent * "    ")
-            end
-            i += 1
-        end
-    end
+    end   
 
     function merge_edge(db::Graph.DB, from::String, to::String, edge::String, props::Dict, url::String, headers::Dict)
         props = JSON3.write(props)
