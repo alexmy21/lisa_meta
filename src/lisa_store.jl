@@ -115,7 +115,7 @@ module Store
         Can be used to simulate different loads with the same files.
     """    
     function ingest_csv_by_column(db::Graph.DB, file::Graph.Assignment, lock_uuid::String; 
-        p::Int=10, limit::Int=-1, offset::Int=0, seed::Int=0)
+        p::Int=10, limit::Int=-1, offset::Int=0, status::String="waiting", seed::Int=0)
 
         global g_seed = seed        
         assign_df = Graph.set_lock!(db, file.id, :, "book_column", "ingest_csv", "waiting", "waiting", lock_uuid; result=true)        
@@ -128,7 +128,10 @@ module Store
         Graph.replace!(db, file_node, table_name="t_nodes")
 
         file_name = abspath(file.item)
-        file_df = CSV.read(file_name, DataFrame; missingstring = "", skipto=offset+1, limit=limit, silencewarnings=true)
+
+        file_df = CSV.read(file_name, DataFrame; missingstring = "", limit=limit, silencewarnings=true) #|> DataFrame
+        println(names(file_df))
+
         file_hll = SetCore.HllSet{p}()
         file_props = Config()
         file_props["file_name"] = file_name
@@ -141,13 +144,9 @@ module Store
             col_props["file_sha1"] = file.id
             col_props["column_type"] = assign.a_type
             # Process the column data depending on the column type
-            if assign.a_type == Missing
-                # println("Processing integer data for column $assign.item")
-            elseif assign.a_type == Int64
-                # println("Processing real number data for column $assign.item")
-            elseif assign.a_type == "String"
+            if occursin("String", string(assign.a_type))    
                 column_name = string(assign.item)                
-                dataset = Set(file_df[!, column_name])         
+                dataset = Set(file_df[!, (column_name)])         
                 col_hll = ingest_dataset(db, dataset, assign.id, ["csv_column"], col_props, p)
                 file_hll = SetCore.union!(file_hll, col_hll)
                 # Create and add to t_edge table a new edge between the file and the column
@@ -157,13 +156,14 @@ module Store
                 edge_props["source_label"] = "csv_file"
                 edge_props["target_label"] = "csv_column"
                 edge = Graph.Edge(file.id, assign.id, "has_column", edge_props)
+
+                println("edge: ", edge)
+
                 # Update "t_edge" table
                 Graph.replace!(db, edge; table_name="t_edges")
-                i = i + 1
-            else
-                # Process other types of data
+                i = i + 1            
             end
-            Graph.unset_lock!(db, assign.id, :, "completed")
+            Graph.unset_lock!(db, assign.id, :, status)
         end
         println("Processed column: $i")
         card = SetCore.count(file_hll)
@@ -321,10 +321,13 @@ module Store
     # This  function returns a matrix where each cell is the node of the intersection
     function get_node_matrix(db::Graph.DB, source_id::String)        
         row_nodes = get_joined_nodes(db, source_id, "has_row")
+        println("row_nodes: ", row_nodes)
         row_sets = [SetCore.restore(SetCore.HllSet{10}(), 
                 JSON3.read(row.dataset, Vector{UInt64})) for row in eachrow(row_nodes)]
         # Select column nodes
         column_nodes = get_joined_nodes(db, source_id, "has_column")
+        println("column_nodes: ", column_nodes)
+
         column_sets = [SetCore.restore(SetCore.HllSet{10}(), 
                 JSON3.read(row.dataset, Vector{UInt64})) for row in eachrow(column_nodes)]
         # Create a matrix where each cell is the cardinality of the intersection 
@@ -433,21 +436,22 @@ module Store
                     # to represent the difference
                     #--------------------------------------------------
                     Graph.node_diff(db, row, node)
-                    #--------------------------------------------------
-                    # Load node tp nodes 
-
-                    dataset = JSON3.read(row.dataset, Vector{Int})
-                    props = JSON3.read(row.props, Dict{String, Any})
-                    labels = row.labels
-                    labels = JSON3.read(labels, Array{String, 1})
-                    g_node = Graph.Node(row.sha1, labels, row.d_sha1, row.card, dataset, props)
-                    Graph.replace!(db, g_node, table_name="nodes")
+                    #--------------------------------------------------                    
                 end
             end
+            # Load node tp nodes
+            dataset = JSON3.read(row.dataset, Vector{Int})
+            props = JSON3.read(row.props, Dict{String, Any})
+            labels = row.labels
+            labels = JSON3.read(labels, Array{String, 1})
+            g_node = Graph.Node(row.sha1, labels, row.d_sha1, row.card, dataset, props)
+            Graph.replace!(db, g_node, table_name="nodes")
+
             # Remove the node from t_nodes
             DBInterface.execute(db.sqlitedb, """DELETE FROM t_nodes WHERE sha1 ='$t_sha1'""") 
             # Delete the record from the nodes table
-            DBInterface.execute(db.sqlitedb, "DELETE FROM assignments WHERE id = '$t_sha1'")
+            DBInterface.execute(db.sqlitedb, """DELETE FROM assignments WHERE id ='$t_sha1'""")
+            println("Removed Node: $t_sha1")
             
         end        
     end
